@@ -1,15 +1,13 @@
 import { db } from "@/db";
 import { stockItems } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { createClient } from "@libsql/client";
+import { createClient } from "@libsql/client/web";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  let url = process.env.TURSO_DATABASE_URL!;
-  if (url.startsWith("libsql://")) url = url.replace("libsql://", "https://");
   const client = createClient({
-    url,
+    url: process.env.TURSO_DATABASE_URL!,
     authToken: process.env.TURSO_AUTH_TOKEN!,
   });
 

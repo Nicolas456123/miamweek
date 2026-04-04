@@ -126,23 +126,34 @@ export default function MenuPage() {
     setAddedToList(true);
   };
 
+  // Compute the actual date from the grid index (0-13)
+  const getDateFromGridIndex = (idx: number) => {
+    const today = new Date();
+    const todayDow = today.getDay();
+    const startOffset = todayDow === 0 ? -6 : 1 - todayDow;
+    const d = new Date(today);
+    d.setDate(today.getDate() + startOffset + idx);
+    return d;
+  };
+
   const addToPlanning = async () => {
     if (!selectedPlat) return;
-    const now = new Date();
-    const day = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - day + (day === 0 ? -6 : 1));
+    const targetDate = getDateFromGridIndex(planningDay);
+    const dow = targetDate.getDay();
+    const dayOfWeek = dow === 0 ? 6 : dow - 1;
+    // Get Monday of target week
+    const monday = new Date(targetDate);
+    const mDow = monday.getDay();
+    monday.setDate(monday.getDate() - mDow + (mDow === 0 ? -6 : 1));
     const weekStart = monday.toISOString().split("T")[0];
+    const baseType = planningMeal;
 
-    const baseType = planningMeal; // "lunch" or "dinner"
-
-    // Add each selected component as a separate entry
     if (includeEntree && suggestions?.entree) {
       await fetch("/api/meal-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weekStart, dayOfWeek: planningDay,
+          weekStart, dayOfWeek,
           mealType: `${baseType}_entree`,
           customName: suggestions.entree.name,
         }),
@@ -153,7 +164,7 @@ export default function MenuPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weekStart, dayOfWeek: planningDay,
+          weekStart, dayOfWeek,
           mealType: `${baseType}_plat`,
           recipeId: selectedPlat.id,
           customName: selectedPlat.name,
@@ -165,7 +176,7 @@ export default function MenuPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weekStart, dayOfWeek: planningDay,
+          weekStart, dayOfWeek,
           mealType: `${baseType}_dessert`,
           customName: suggestions.dessert.name,
         }),
@@ -176,7 +187,7 @@ export default function MenuPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weekStart, dayOfWeek: planningDay,
+          weekStart, dayOfWeek,
           mealType: `${baseType}_boisson`,
           customName: suggestions.boisson.name,
         }),
@@ -374,39 +385,139 @@ export default function MenuPage() {
             )}
           </div>
 
-          {/* Planning picker */}
+          {/* Planning grid picker */}
           <div className="mt-4 pt-4 border-t border-border">
-            <p className="text-sm font-medium mb-2">Ajouter au planning</p>
-            <div className="flex gap-2 mb-3">
-              <select
-                value={planningDay}
-                onChange={(e) => setPlanningDay(Number(e.target.value))}
-                className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm"
-              >
-                {["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"].map((d, i) => (
-                  <option key={i} value={i}>{d}</option>
-                ))}
-              </select>
-              <select
-                value={planningMeal}
-                onChange={(e) => setPlanningMeal(e.target.value as "lunch" | "dinner")}
-                className="bg-background border border-border rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="lunch">Midi</option>
-                <option value="dinner">Soir</option>
-              </select>
-              <button
-                onClick={addToPlanning}
-                disabled={addedToPlanning}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  addedToPlanning
-                    ? "bg-blue-100 text-blue-600"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
-                }`}
-              >
-                {addedToPlanning ? "Planifié !" : "📅 Planifier"}
-              </button>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium">Placer sur le planning</p>
+              {addedToPlanning && (
+                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+                  Planifié !
+                </span>
+              )}
             </div>
+            {(() => {
+              // Build 14 days starting from today
+              const today = new Date();
+              const todayDow = today.getDay();
+              const startOffset = todayDow === 0 ? -6 : 1 - todayDow; // Monday of this week
+              const days: { date: Date; dayOfWeek: number; weekStart: string; label: string; dateLabel: string; isToday: boolean }[] = [];
+              for (let i = 0; i < 14; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + startOffset + i);
+                const dow = d.getDay();
+                const dayOfWeek = dow === 0 ? 6 : dow - 1; // 0=lundi
+                const monday = new Date(d);
+                const mDow = monday.getDay();
+                monday.setDate(monday.getDate() - mDow + (mDow === 0 ? -6 : 1));
+                days.push({
+                  date: d,
+                  dayOfWeek,
+                  weekStart: monday.toISOString().split("T")[0],
+                  label: ["L", "M", "Me", "J", "V", "S", "D"][dayOfWeek],
+                  dateLabel: d.toLocaleDateString("fr-FR", { day: "numeric" }),
+                  isToday: d.toDateString() === today.toDateString(),
+                });
+              }
+
+              const isSelected = (idx: number, meal: string) =>
+                planningDay === days[idx].dayOfWeek &&
+                planningMeal === meal &&
+                days[idx].weekStart === (() => {
+                  const mon = new Date(today);
+                  const dw = mon.getDay();
+                  mon.setDate(mon.getDate() - dw + (dw === 0 ? -6 : 1) + (weekOffset * 7));
+                  return mon.toISOString().split("T")[0];
+                })();
+
+              // Track which week offset is selected
+              const selectedDayData = days.find((_, idx) => {
+                const d = days[idx];
+                return planningDay === d.dayOfWeek;
+              });
+              void selectedDayData; // suppress unused
+
+              return (
+                <div className="overflow-x-auto">
+                  <div className="inline-grid gap-0.5" style={{ gridTemplateColumns: `auto repeat(${days.length}, 1fr)` }}>
+                    {/* Header row: day labels */}
+                    <div />
+                    {days.map((d, i) => (
+                      <div key={`h-${i}`} className="text-center px-1">
+                        <span className={`text-[10px] font-bold block ${d.isToday ? "text-primary" : "text-muted"}`}>
+                          {d.label}
+                        </span>
+                        <span className={`text-[10px] block ${d.isToday ? "text-primary font-bold" : "text-muted"}`}>
+                          {d.dateLabel}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Midi row */}
+                    <span className="text-[10px] text-muted font-medium pr-1 self-center">Midi</span>
+                    {days.map((d, i) => {
+                      const sel = planningDay === i && planningMeal === "lunch";
+                      return (
+                        <button
+                          key={`l-${i}`}
+                          onClick={() => {
+                            setPlanningDay(i);
+                            setPlanningMeal("lunch");
+                            setAddedToPlanning(false);
+                          }}
+                          className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                            sel
+                              ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300"
+                              : d.isToday
+                                ? "bg-primary-light border border-primary/30 hover:bg-blue-100"
+                                : "bg-background border border-border hover:bg-blue-50 hover:border-blue-300"
+                          }`}
+                        >
+                          {sel ? "☀️" : ""}
+                        </button>
+                      );
+                    })}
+
+                    {/* Soir row */}
+                    <span className="text-[10px] text-muted font-medium pr-1 self-center">Soir</span>
+                    {days.map((d, i) => {
+                      const sel = planningDay === i && planningMeal === "dinner";
+                      return (
+                        <button
+                          key={`d-${i}`}
+                          onClick={() => {
+                            setPlanningDay(i);
+                            setPlanningMeal("dinner");
+                            setAddedToPlanning(false);
+                          }}
+                          className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                            sel
+                              ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300"
+                              : d.isToday
+                                ? "bg-primary-light border border-primary/30 hover:bg-blue-100"
+                                : "bg-background border border-border hover:bg-blue-50 hover:border-blue-300"
+                          }`}
+                        >
+                          {sel ? "🌙" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Plan button */}
+            <button
+              onClick={addToPlanning}
+              disabled={addedToPlanning}
+              className={`mt-3 w-full py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                addedToPlanning
+                  ? "bg-blue-100 text-blue-600"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              {addedToPlanning ? "Planifié !" : "📅 Planifier ce repas"}
+            </button>
           </div>
 
           {/* Add to shopping list */}

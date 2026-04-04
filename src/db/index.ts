@@ -28,3 +28,4 @@ export const db = new Proxy({} as any, {
     return (instance as any)[prop];
   },
 }) as ReturnType<typeof drizzle<typeof schema>>;
+// force redeploy

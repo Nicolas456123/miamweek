@@ -70,6 +70,7 @@ export default function ListePage() {
       checked: 0,
       source: "manual",
       list_status: "prep",
+      source_recipe: null,
     };
     setListItems((prev) => [...prev, newItem]);
 
@@ -109,6 +110,7 @@ export default function ListePage() {
       checked: 0,
       source: "manual",
       list_status: "prep",
+      source_recipe: null,
     };
     setListItems((prev) => [...prev, newItem]);
     setCustomName("");

@@ -5,6 +5,20 @@ import { Logo } from "@/components/logo";
 
 const quickLinks = [
   {
+    href: "/planning",
+    title: "Planning repas",
+    description: "Organiser les repas de la semaine",
+    icon: "📅",
+    color: "bg-blue-50 text-blue-600",
+  },
+  {
+    href: "/menu",
+    title: "Composer un menu",
+    description: "Créer un repas complet avec suggestions",
+    icon: "🍽️",
+    color: "bg-amber-50 text-amber-600",
+  },
+  {
     href: "/liste",
     title: "Préparer ma liste",
     description: "Composer la liste de courses depuis le catalogue",
@@ -21,7 +35,7 @@ const quickLinks = [
   {
     href: "/recettes",
     title: "Mes recettes",
-    description: "Gérer et planifier les repas",
+    description: "41 recettes détaillées avec étapes",
     icon: "📖",
     color: "bg-warning-light text-warning",
   },

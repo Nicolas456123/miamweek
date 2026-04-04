@@ -6,8 +6,10 @@ import { createClient } from "@libsql/client";
 export const runtime = "nodejs";
 
 export async function GET() {
+  let url = process.env.TURSO_DATABASE_URL!;
+  if (url.startsWith("libsql://")) url = url.replace("libsql://", "https://");
   const client = createClient({
-    url: process.env.TURSO_DATABASE_URL!,
+    url,
     authToken: process.env.TURSO_AUTH_TOKEN!,
   });
 

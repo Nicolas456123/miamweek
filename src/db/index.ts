@@ -3,13 +3,18 @@ import { createClient } from "@libsql/client";
 import * as schema from "./schema";
 
 function createDb() {
-  const url = process.env.TURSO_DATABASE_URL;
+  let url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
   if (!url || !authToken) {
     throw new Error(
       `Missing database credentials: url=${url ? "set" : "missing"}, token=${authToken ? "set" : "missing"}`
     );
+  }
+
+  // libsql:// URLs need to be converted to https:// for HTTP transport
+  if (url.startsWith("libsql://")) {
+    url = url.replace("libsql://", "https://");
   }
 
   const client = createClient({ url, authToken });

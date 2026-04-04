@@ -419,23 +419,6 @@ export default function MenuPage() {
                 });
               }
 
-              const isSelected = (idx: number, meal: string) =>
-                planningDay === days[idx].dayOfWeek &&
-                planningMeal === meal &&
-                days[idx].weekStart === (() => {
-                  const mon = new Date(today);
-                  const dw = mon.getDay();
-                  mon.setDate(mon.getDate() - dw + (dw === 0 ? -6 : 1) + (weekOffset * 7));
-                  return mon.toISOString().split("T")[0];
-                })();
-
-              // Track which week offset is selected
-              const selectedDayData = days.find((_, idx) => {
-                const d = days[idx];
-                return planningDay === d.dayOfWeek;
-              });
-              void selectedDayData; // suppress unused
-
               return (
                 <div className="overflow-x-auto">
                   <div className="inline-grid gap-0.5" style={{ gridTemplateColumns: `auto repeat(${days.length}, 1fr)` }}>

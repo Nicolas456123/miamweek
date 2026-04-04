@@ -40,6 +40,10 @@ export default function ListePage() {
       .then((data) => setProducts(Array.isArray(data) ? data : []))
       .catch(console.error);
     fetchList();
+
+    // Auto-refresh every 5s for multi-user sync
+    const interval = setInterval(fetchList, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchList = () => {

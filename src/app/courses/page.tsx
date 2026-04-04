@@ -30,6 +30,10 @@ export default function CoursesPage() {
 
   useEffect(() => {
     fetchItems();
+
+    // Auto-refresh every 5s for multi-user sync
+    const interval = setInterval(fetchItems, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const toggleItem = (id: number, checked: boolean) => {

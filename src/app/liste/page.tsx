@@ -49,8 +49,25 @@ export default function ListePage() {
       .catch(console.error);
   };
 
-  const addProduct = async (product: Product) => {
-    await fetch("/api/list", {
+  let nextTempId = -1;
+
+  const addProduct = (product: Product) => {
+    // Optimistic: add to list instantly
+    const tempId = nextTempId--;
+    const newItem: ListItem = {
+      id: tempId,
+      product_id: product.id,
+      product_name: product.name,
+      quantity: 1,
+      unit: product.default_unit,
+      category: product.category,
+      checked: 0,
+      source: "manual",
+      list_status: "prep",
+    };
+    setListItems((prev) => [...prev, newItem]);
+
+    fetch("/api/list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -62,47 +79,78 @@ export default function ListePage() {
         source: "manual",
         listStatus: "prep",
       }),
-    });
-    fetchList();
+    })
+      .then((r) => r.json())
+      .then((saved) => {
+        // Replace temp item with real one from server
+        setListItems((prev) =>
+          prev.map((item) => (item.id === tempId ? saved : item))
+        );
+      })
+      .catch(() => fetchList());
   };
 
-  const addCustom = async () => {
+  const addCustom = () => {
     if (!customName.trim()) return;
-    await fetch("/api/list", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        productName: customName,
-        quantity: customQty ? Number(customQty) : 1,
-        unit: customUnit,
-        category: activeCategory || "Autre",
-        source: "manual",
-        listStatus: "prep",
-      }),
-    });
+    const tempId = nextTempId--;
+    const newItem: ListItem = {
+      id: tempId,
+      product_id: null,
+      product_name: customName,
+      quantity: customQty ? Number(customQty) : 1,
+      unit: customUnit,
+      category: activeCategory || "Autre",
+      checked: 0,
+      source: "manual",
+      list_status: "prep",
+    };
+    setListItems((prev) => [...prev, newItem]);
     setCustomName("");
     setCustomQty("");
     setShowCustom(false);
-    fetchList();
+
+    fetch("/api/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productName: newItem.product_name,
+        quantity: newItem.quantity,
+        unit: newItem.unit,
+        category: newItem.category,
+        source: "manual",
+        listStatus: "prep",
+      }),
+    })
+      .then((r) => r.json())
+      .then((saved) => {
+        setListItems((prev) =>
+          prev.map((item) => (item.id === tempId ? saved : item))
+        );
+      })
+      .catch(() => fetchList());
   };
 
-  const removeItem = async (id: number) => {
-    await fetch("/api/list", {
+  const removeItem = (id: number) => {
+    // Optimistic: remove instantly
+    setListItems((prev) => prev.filter((item) => item.id !== id));
+    fetch("/api/list", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
-    });
-    fetchList();
+    }).catch(() => fetchList());
   };
 
-  const updateQuantity = async (id: number, quantity: number) => {
+  const updateQuantity = (id: number, quantity: number) => {
     if (quantity <= 0) return removeItem(id);
-    await fetch("/api/list", {
+    // Optimistic: update instantly
+    setListItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, quantity } : item))
+    );
+    fetch("/api/list", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, quantity }),
-    });
-    fetchList();
+    }).catch(() => fetchList());
   };
 
   const validateList = async () => {

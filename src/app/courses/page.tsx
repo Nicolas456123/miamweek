@@ -112,8 +112,23 @@ export default function CoursesPage() {
       alert("Tu dois être en ligne pour terminer les courses.");
       return;
     }
-    await fetch("/api/list/finish", { method: "POST" });
+    const checked = items.filter((i) => !!i.checked).length;
+    const unchecked = items.filter((i) => !i.checked).length;
+    let msg = `Valider les courses ?\n\n${checked} article(s) pris`;
+    if (unchecked > 0) msg += `\n${unchecked} article(s) non pris (seront supprimés)`;
+    msg += `\n\nLes articles cochés seront ajoutés à ton inventaire.`;
+    if (!confirm(msg)) return;
+
+    const res = await fetch("/api/list/finish", { method: "POST" });
+    const data = await res.json();
+    alert(`Courses terminées !\n${data.itemsProcessed || 0} produit(s) ajouté(s) à l'inventaire.`);
     fetchItems();
+  };
+
+  const cancelShopping = async () => {
+    if (!confirm("Annuler les courses ? La liste reviendra en mode préparation.")) return;
+    await fetch("/api/list/cancel", { method: "POST" });
+    window.location.href = "/liste";
   };
 
   const grouped = useMemo(() => {
@@ -187,13 +202,21 @@ export default function CoursesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">Mode courses</h1>
-        <button
-          onClick={finishShopping}
-          disabled={!isOnline}
-          className="px-4 py-2 bg-success text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          Terminer
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={cancelShopping}
+            className="px-4 py-2 bg-card border border-border text-muted rounded-xl text-sm font-medium hover:text-danger hover:border-danger transition-colors"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={finishShopping}
+            disabled={!isOnline}
+            className="px-4 py-2 bg-success text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            Valider les courses
+          </button>
+        </div>
       </div>
 
       {/* Progress */}

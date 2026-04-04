@@ -29,13 +29,53 @@ export async function POST(request: Request) {
   // Add source_recipe column if it doesn't exist yet
   try { await query("ALTER TABLE list_items ADD COLUMN source_recipe TEXT"); } catch { /* already exists */ }
 
+  // For recipe ingredients, convert to purchase units (e.g., 150g lardons → 1 paquet)
+  let finalQty = quantity || null;
+  let finalUnit = unit || null;
+  let finalProductId = productId || null;
+
+  if (source === "recipe" && !productId) {
+    // Try to find matching product in catalog
+    const match = await query(
+      "SELECT id, default_unit FROM products WHERE LOWER(name) = LOWER(?) LIMIT 1",
+      [productName]
+    );
+    if (match.rows.length > 0) {
+      finalProductId = match.rows[0].id as number;
+      const catalogUnit = match.rows[0].default_unit as string;
+      // If recipe uses g/mL but catalog uses pcs/lot/paquet, convert to 1 unit
+      if ((unit === "g" || unit === "mL") && !["g", "mL", "kg", "L"].includes(catalogUnit)) {
+        finalQty = 1;
+        finalUnit = catalogUnit;
+      }
+    }
+  }
+
+  // Check if same product already in list (same status) → merge quantities
+  if (finalProductId) {
+    const existing = await query(
+      "SELECT id, quantity FROM list_items WHERE product_id = ? AND list_status = ? LIMIT 1",
+      [finalProductId, listStatus || "prep"]
+    );
+    if (existing.rows.length > 0) {
+      const existingQty = (existing.rows[0].quantity as number) || 1;
+      const addQty = finalQty || 1;
+      const mergedQty = existingQty + addQty;
+      const updateResult = await query(
+        "UPDATE list_items SET quantity = ? WHERE id = ? RETURNING *",
+        [mergedQty, existing.rows[0].id as number]
+      );
+      return Response.json(updateResult.rows[0], { status: 200 });
+    }
+  }
+
   const result = await query(
     "INSERT INTO list_items (product_id, product_name, quantity, unit, category, source, list_status, source_recipe) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
     [
-      productId || null,
+      finalProductId,
       productName,
-      quantity || null,
-      unit || null,
+      finalQty,
+      finalUnit,
       category || null,
       source || "manual",
       listStatus || "prep",

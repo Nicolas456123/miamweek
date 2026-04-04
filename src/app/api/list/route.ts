@@ -1,6 +1,4 @@
-import { db } from "@/db";
-import { listItems } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
 
@@ -9,15 +7,15 @@ export async function GET(request: Request) {
   const status = searchParams.get("status");
 
   if (status) {
-    const items = await db
-      .select()
-      .from(listItems)
-      .where(eq(listItems.listStatus, status));
-    return Response.json(items);
+    const result = await query(
+      "SELECT * FROM list_items WHERE list_status = ?",
+      [status]
+    );
+    return Response.json(result.rows);
   }
 
-  const items = await db.select().from(listItems);
-  return Response.json(items);
+  const result = await query("SELECT * FROM list_items");
+  return Response.json(result.rows);
 }
 
 export async function POST(request: Request) {
@@ -28,17 +26,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "productName is required" }, { status: 400 });
   }
 
-  const result = await db.insert(listItems).values({
-    productId: productId || null,
-    productName,
-    quantity: quantity || null,
-    unit: unit || null,
-    category: category || null,
-    source: source || "manual",
-    listStatus: listStatus || "prep",
-  }).returning();
+  const result = await query(
+    "INSERT INTO list_items (product_id, product_name, quantity, unit, category, source, list_status) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *",
+    [
+      productId || null,
+      productName,
+      quantity || null,
+      unit || null,
+      category || null,
+      source || "manual",
+      listStatus || "prep",
+    ]
+  );
 
-  return Response.json(result[0], { status: 201 });
+  return Response.json(result.rows[0], { status: 201 });
 }
 
 export async function PUT(request: Request) {
@@ -49,27 +50,41 @@ export async function PUT(request: Request) {
     return Response.json({ error: "id is required" }, { status: 400 });
   }
 
-  const updates: Record<string, unknown> = {};
+  const setClauses: string[] = [];
+  const values: (string | number | null)[] = [];
+
   if (checked !== undefined) {
-    updates.checked = checked;
+    setClauses.push("checked = ?");
+    values.push(checked ? 1 : 0);
     if (checked === true) {
-      updates.checkedAt = new Date().toISOString();
+      setClauses.push("checked_at = ?");
+      values.push(new Date().toISOString());
     }
   }
-  if (quantity !== undefined) updates.quantity = quantity;
-  if (listStatus !== undefined) updates.listStatus = listStatus;
+  if (quantity !== undefined) {
+    setClauses.push("quantity = ?");
+    values.push(quantity);
+  }
+  if (listStatus !== undefined) {
+    setClauses.push("list_status = ?");
+    values.push(listStatus);
+  }
 
-  const result = await db
-    .update(listItems)
-    .set(updates)
-    .where(eq(listItems.id, id))
-    .returning();
+  if (setClauses.length === 0) {
+    return Response.json({ error: "No fields to update" }, { status: 400 });
+  }
 
-  if (result.length === 0) {
+  values.push(id);
+  const result = await query(
+    `UPDATE list_items SET ${setClauses.join(", ")} WHERE id = ? RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
     return Response.json({ error: "Item not found" }, { status: 404 });
   }
 
-  return Response.json(result[0]);
+  return Response.json(result.rows[0]);
 }
 
 export async function DELETE(request: Request) {
@@ -80,6 +95,6 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "id is required" }, { status: 400 });
   }
 
-  await db.delete(listItems).where(eq(listItems.id, id));
+  await query("DELETE FROM list_items WHERE id = ?", [id]);
   return Response.json({ success: true });
 }

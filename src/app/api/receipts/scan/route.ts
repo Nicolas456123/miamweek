@@ -1,5 +1,4 @@
-import { db } from "@/db";
-import { receipts, priceHistory } from "@/db/schema";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
 
@@ -42,22 +41,19 @@ export async function POST(request: Request) {
   }
 
   // Create receipt and price entries
-  const [receipt] = await db.insert(receipts).values({
-    date: parsed.date,
-    store: parsed.store || null,
-    total: parsed.total || null,
-  }).returning();
+  const receiptResult = await query(
+    "INSERT INTO receipts (date, store, total) VALUES (?, ?, ?) RETURNING *",
+    [parsed.date, parsed.store || null, parsed.total || null]
+  );
+  const receipt = receiptResult.rows[0];
 
   const priceEntries = [];
   for (const item of parsed.items) {
-    const [entry] = await db.insert(priceHistory).values({
-      productName: item.name,
-      price: item.price,
-      date: parsed.date,
-      store: parsed.store || null,
-      receiptId: receipt.id,
-    }).returning();
-    priceEntries.push(entry);
+    const entryResult = await query(
+      "INSERT INTO price_history (product_name, price, date, store, receipt_id) VALUES (?, ?, ?, ?, ?) RETURNING *",
+      [item.name, item.price, parsed.date, parsed.store || null, receipt.id as number]
+    );
+    priceEntries.push(entryResult.rows[0]);
   }
 
   return Response.json({ receipt, items: priceEntries }, { status: 201 });

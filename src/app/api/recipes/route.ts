@@ -1,21 +1,18 @@
-import { NextRequest } from "next/server";
-import { db } from "@/db";
-import { recipes, recipeIngredients } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const allRecipes = await db.select().from(recipes);
+    const recipesResult = await query("SELECT * FROM recipes");
 
     const recipesWithIngredients = await Promise.all(
-      allRecipes.map(async (recipe) => {
-        const ingredients = await db
-          .select()
-          .from(recipeIngredients)
-          .where(eq(recipeIngredients.recipeId, recipe.id));
-        return { ...recipe, ingredients };
+      recipesResult.rows.map(async (recipe) => {
+        const ingredientsResult = await query(
+          "SELECT * FROM recipe_ingredients WHERE recipe_id = ?",
+          [recipe.id as number]
+        );
+        return { ...recipe, ingredients: ingredientsResult.rows };
       })
     );
 
@@ -28,7 +25,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { name, description, servings, category, ingredients } = body;
@@ -37,37 +34,39 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Name is required" }, { status: 400 });
     }
 
-    const [newRecipe] = await db
-      .insert(recipes)
-      .values({ name, description, servings, category })
-      .returning();
+    const recipeResult = await query(
+      "INSERT INTO recipes (name, description, servings, category) VALUES (?, ?, ?, ?) RETURNING *",
+      [name, description || null, servings || null, category || null]
+    );
+    const newRecipe = recipeResult.rows[0];
 
     if (ingredients && Array.isArray(ingredients) && ingredients.length > 0) {
-      await db.insert(recipeIngredients).values(
-        ingredients.map(
-          (ing: {
-            name: string;
-            quantity?: number;
-            unit?: string;
-            category?: string;
-          }) => ({
-            recipeId: newRecipe.id,
-            name: ing.name,
-            quantity: ing.quantity,
-            unit: ing.unit,
-            category: ing.category,
-          })
-        )
-      );
+      for (const ing of ingredients as {
+        name: string;
+        quantity?: number;
+        unit?: string;
+        category?: string;
+      }[]) {
+        await query(
+          "INSERT INTO recipe_ingredients (recipe_id, name, quantity, unit, category) VALUES (?, ?, ?, ?, ?)",
+          [
+            newRecipe.id as number,
+            ing.name,
+            ing.quantity ?? null,
+            ing.unit || null,
+            ing.category || null,
+          ]
+        );
+      }
     }
 
-    const savedIngredients = await db
-      .select()
-      .from(recipeIngredients)
-      .where(eq(recipeIngredients.recipeId, newRecipe.id));
+    const savedIngredientsResult = await query(
+      "SELECT * FROM recipe_ingredients WHERE recipe_id = ?",
+      [newRecipe.id as number]
+    );
 
     return Response.json(
-      { ...newRecipe, ingredients: savedIngredients },
+      { ...newRecipe, ingredients: savedIngredientsResult.rows },
       { status: 201 }
     );
   } catch (error) {

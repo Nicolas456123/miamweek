@@ -1,17 +1,14 @@
-import { db } from "@/db";
-import { products } from "@/db/schema";
-import { asc } from "drizzle-orm";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const allProducts = await db
-      .select()
-      .from(products)
-      .orderBy(asc(products.category), asc(products.name));
+    const result = await query(
+      "SELECT * FROM products ORDER BY category ASC, name ASC"
+    );
 
-    return Response.json(allProducts);
+    return Response.json(result.rows);
   } catch (error) {
     console.error("Failed to fetch products:", error);
     return Response.json(
@@ -33,18 +30,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await db
-      .insert(products)
-      .values({
-        name,
-        category,
-        defaultUnit,
-        icon: icon || null,
-        isCustom: true,
-      })
-      .returning();
+    const result = await query(
+      "INSERT INTO products (name, category, default_unit, icon, is_custom) VALUES (?, ?, ?, ?, ?) RETURNING *",
+      [name, category, defaultUnit, icon || null, 1]
+    );
 
-    return Response.json(result[0], { status: 201 });
+    return Response.json(result.rows[0], { status: 201 });
   } catch (error) {
     console.error("Failed to create product:", error);
     return Response.json(

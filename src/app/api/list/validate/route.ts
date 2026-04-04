@@ -1,14 +1,11 @@
-import { db } from "@/db";
-import { listItems } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
 
 export async function POST() {
-  await db
-    .update(listItems)
-    .set({ listStatus: "active" })
-    .where(eq(listItems.listStatus, "prep"));
+  await query(
+    "UPDATE list_items SET list_status = 'active' WHERE list_status = 'prep'"
+  );
 
   return Response.json({ success: true });
 }

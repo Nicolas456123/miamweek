@@ -1,6 +1,4 @@
-import { db } from "@/db";
-import { receipts, priceHistory } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
 
@@ -9,18 +7,14 @@ export async function GET(request: Request) {
   const type = searchParams.get("type");
 
   if (type === "prices") {
-    const prices = await db
-      .select()
-      .from(priceHistory)
-      .orderBy(desc(priceHistory.date));
-    return Response.json(prices);
+    const result = await query(
+      "SELECT * FROM price_history ORDER BY date DESC"
+    );
+    return Response.json(result.rows);
   }
 
-  const allReceipts = await db
-    .select()
-    .from(receipts)
-    .orderBy(desc(receipts.date));
-  return Response.json(allReceipts);
+  const result = await query("SELECT * FROM receipts ORDER BY date DESC");
+  return Response.json(result.rows);
 }
 
 export async function POST(request: Request) {
@@ -32,24 +26,21 @@ export async function POST(request: Request) {
   }
 
   // Insert receipt
-  const [receipt] = await db.insert(receipts).values({
-    date,
-    store: store || null,
-    total: total || null,
-  }).returning();
+  const receiptResult = await query(
+    "INSERT INTO receipts (date, store, total) VALUES (?, ?, ?) RETURNING *",
+    [date, store || null, total || null]
+  );
+  const receipt = receiptResult.rows[0];
 
   // Insert price history entries
   const priceEntries = [];
   if (items && Array.isArray(items)) {
     for (const item of items) {
-      const [entry] = await db.insert(priceHistory).values({
-        productName: item.productName,
-        price: item.price,
-        date,
-        store: store || null,
-        receiptId: receipt.id,
-      }).returning();
-      priceEntries.push(entry);
+      const entryResult = await query(
+        "INSERT INTO price_history (product_name, price, date, store, receipt_id) VALUES (?, ?, ?, ?, ?) RETURNING *",
+        [item.productName, item.price, date, store || null, receipt.id as number]
+      );
+      priceEntries.push(entryResult.rows[0]);
     }
   }
 

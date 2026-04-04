@@ -1,7 +1,5 @@
 import { NextRequest } from "next/server";
-import { db } from "@/db";
-import { recipes, recipeIngredients } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
 
@@ -13,21 +11,22 @@ export async function GET(
     const { id } = await params;
     const recipeId = parseInt(id, 10);
 
-    const [recipe] = await db
-      .select()
-      .from(recipes)
-      .where(eq(recipes.id, recipeId));
+    const recipeResult = await query(
+      "SELECT * FROM recipes WHERE id = ?",
+      [recipeId]
+    );
 
-    if (!recipe) {
+    if (recipeResult.rows.length === 0) {
       return Response.json({ error: "Recipe not found" }, { status: 404 });
     }
 
-    const ingredients = await db
-      .select()
-      .from(recipeIngredients)
-      .where(eq(recipeIngredients.recipeId, recipeId));
+    const recipe = recipeResult.rows[0];
+    const ingredientsResult = await query(
+      "SELECT * FROM recipe_ingredients WHERE recipe_id = ?",
+      [recipeId]
+    );
 
-    return Response.json({ ...recipe, ingredients });
+    return Response.json({ ...recipe, ingredients: ingredientsResult.rows });
   } catch (error) {
     return Response.json(
       { error: "Failed to fetch recipe" },
@@ -46,48 +45,51 @@ export async function PUT(
     const body = await request.json();
     const { name, description, servings, category, ingredients } = body;
 
-    const [updated] = await db
-      .update(recipes)
-      .set({ name, description, servings, category })
-      .where(eq(recipes.id, recipeId))
-      .returning();
+    const updateResult = await query(
+      "UPDATE recipes SET name = ?, description = ?, servings = ?, category = ? WHERE id = ? RETURNING *",
+      [name, description || null, servings || null, category || null, recipeId]
+    );
 
-    if (!updated) {
+    if (updateResult.rows.length === 0) {
       return Response.json({ error: "Recipe not found" }, { status: 404 });
     }
 
+    const updated = updateResult.rows[0];
+
     if (ingredients && Array.isArray(ingredients)) {
       // Delete existing ingredients and replace with new ones
-      await db
-        .delete(recipeIngredients)
-        .where(eq(recipeIngredients.recipeId, recipeId));
+      await query(
+        "DELETE FROM recipe_ingredients WHERE recipe_id = ?",
+        [recipeId]
+      );
 
       if (ingredients.length > 0) {
-        await db.insert(recipeIngredients).values(
-          ingredients.map(
-            (ing: {
-              name: string;
-              quantity?: number;
-              unit?: string;
-              category?: string;
-            }) => ({
-              recipeId: recipeId,
-              name: ing.name,
-              quantity: ing.quantity,
-              unit: ing.unit,
-              category: ing.category,
-            })
-          )
-        );
+        for (const ing of ingredients as {
+          name: string;
+          quantity?: number;
+          unit?: string;
+          category?: string;
+        }[]) {
+          await query(
+            "INSERT INTO recipe_ingredients (recipe_id, name, quantity, unit, category) VALUES (?, ?, ?, ?, ?)",
+            [
+              recipeId,
+              ing.name,
+              ing.quantity ?? null,
+              ing.unit || null,
+              ing.category || null,
+            ]
+          );
+        }
       }
     }
 
-    const savedIngredients = await db
-      .select()
-      .from(recipeIngredients)
-      .where(eq(recipeIngredients.recipeId, recipeId));
+    const savedIngredientsResult = await query(
+      "SELECT * FROM recipe_ingredients WHERE recipe_id = ?",
+      [recipeId]
+    );
 
-    return Response.json({ ...updated, ingredients: savedIngredients });
+    return Response.json({ ...updated, ingredients: savedIngredientsResult.rows });
   } catch (error) {
     return Response.json(
       { error: "Failed to update recipe" },
@@ -104,12 +106,12 @@ export async function DELETE(
     const { id } = await params;
     const recipeId = parseInt(id, 10);
 
-    const [deleted] = await db
-      .delete(recipes)
-      .where(eq(recipes.id, recipeId))
-      .returning();
+    const deleteResult = await query(
+      "DELETE FROM recipes WHERE id = ? RETURNING *",
+      [recipeId]
+    );
 
-    if (!deleted) {
+    if (deleteResult.rows.length === 0) {
       return Response.json({ error: "Recipe not found" }, { status: 404 });
     }
 

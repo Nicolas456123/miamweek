@@ -36,7 +36,7 @@ export default function RecettesPage() {
   const fetchRecipes = () => {
     fetch("/api/recipes")
       .then((r) => r.json())
-      .then(setRecipes)
+      .then((data) => setRecipes(Array.isArray(data) ? data : []))
       .catch(console.error);
   };
 

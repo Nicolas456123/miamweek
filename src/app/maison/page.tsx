@@ -21,7 +21,7 @@ export default function MaisonPage() {
   const fetchTasks = () => {
     fetch("/api/tasks")
       .then((r) => r.json())
-      .then(setTasks)
+      .then((data) => setTasks(Array.isArray(data) ? data : []))
       .catch(console.error);
   };
 

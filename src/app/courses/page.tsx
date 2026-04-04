@@ -26,7 +26,7 @@ export default function CoursesPage() {
   const fetchItems = useCallback(() => {
     fetch(`/api/shopping?weekStart=${weekStart}`)
       .then((r) => r.json())
-      .then(setItems)
+      .then((data) => setItems(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, [weekStart]);
 

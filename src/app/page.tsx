@@ -32,7 +32,7 @@ export default function PlanningPage() {
   const fetchMeals = useCallback(() => {
     fetch(`/api/meal-plan?weekStart=${weekStart}`)
       .then((r) => r.json())
-      .then(setMeals)
+      .then((data) => setMeals(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, [weekStart]);
 
@@ -40,7 +40,7 @@ export default function PlanningPage() {
     fetchMeals();
     fetch("/api/recipes")
       .then((r) => r.json())
-      .then(setRecipes)
+      .then((data) => setRecipes(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, [fetchMeals]);
 

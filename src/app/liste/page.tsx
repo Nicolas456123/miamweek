@@ -8,20 +8,20 @@ type Product = {
   id: number;
   name: string;
   category: string;
-  defaultUnit: string;
+  default_unit: string;
   icon: string | null;
 };
 
 type ListItem = {
   id: number;
-  productId: number | null;
-  productName: string;
+  product_id: number | null;
+  product_name: string;
   quantity: number | null;
   unit: string | null;
   category: string | null;
-  checked: boolean;
+  checked: boolean | number;
   source: string;
-  listStatus: string;
+  list_status: string;
 };
 
 export default function ListePage() {
@@ -57,7 +57,7 @@ export default function ListePage() {
         productId: product.id,
         productName: product.name,
         quantity: 1,
-        unit: product.defaultUnit,
+        unit: product.default_unit,
         category: product.category,
         source: "manual",
         listStatus: "prep",
@@ -134,8 +134,9 @@ export default function ListePage() {
     return groups;
   }, [listItems]);
 
-  const isInList = (productId: number) =>
-    listItems.some((item) => item.productId === productId);
+  const getListItem = (productId: number) =>
+    listItems.find((item) => item.product_id === productId);
+  const isInList = (productId: number) => !!getListItem(productId);
 
   return (
     <div>
@@ -196,26 +197,55 @@ export default function ListePage() {
           {/* Products grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {filteredProducts.map((product) => {
-              const inList = isInList(product.id);
+              const listItem = getListItem(product.id);
+              const inList = !!listItem;
               return (
-                <button
+                <div
                   key={product.id}
-                  onClick={() => !inList && addProduct(product)}
-                  className={`p-3 rounded-xl border text-left transition-all text-sm ${
+                  className={`p-3 rounded-xl border text-left transition-all text-sm relative ${
                     inList
-                      ? "bg-primary-light border-primary/30 opacity-60"
-                      : "bg-card border-border hover:border-primary hover:shadow-sm"
+                      ? "bg-primary-light border-primary/40"
+                      : "bg-card border-border hover:border-primary hover:shadow-sm cursor-pointer"
                   }`}
+                  onClick={() => !inList && addProduct(product)}
                 >
-                  <span className="text-lg">{product.icon || "🛒"}</span>
+                  <span className="text-xl">{product.icon || "🛒"}</span>
                   <p className="font-medium mt-1 truncate">{product.name}</p>
-                  <p className="text-xs text-muted">{product.defaultUnit}</p>
-                  {inList && (
-                    <span className="text-xs text-primary font-medium">
-                      Dans la liste
-                    </span>
+                  {inList && listItem ? (
+                    <div className="flex items-center gap-1 mt-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(listItem.id, (listItem.quantity || 1) - 1);
+                        }}
+                        className="w-6 h-6 rounded-full bg-white/80 text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger"
+                      >
+                        -
+                      </button>
+                      <span className="text-xs font-bold text-primary w-12 text-center">
+                        {listItem.quantity || 1} {listItem.unit}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(listItem.id, (listItem.quantity || 1) + 1);
+                        }}
+                        className="w-6 h-6 rounded-full bg-white/80 text-xs font-bold flex items-center justify-center hover:bg-primary hover:text-white"
+                      >
+                        +
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted">{product.default_unit}</p>
                   )}
-                </button>
+                  {inList && (
+                    <div className="absolute top-2 right-2 w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -311,7 +341,7 @@ export default function ListePage() {
                           className="flex items-center gap-2 py-1.5 group"
                         >
                           <span className="text-sm flex-1 truncate">
-                            {item.productName}
+                            {item.product_name}
                           </span>
                           <div className="flex items-center gap-1">
                             <button

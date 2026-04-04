@@ -6,14 +6,14 @@ import { CategoryIcon } from "@/components/category-icons";
 
 type ListItem = {
   id: number;
-  productId: number | null;
-  productName: string;
+  product_id: number | null;
+  product_name: string;
   quantity: number | null;
   unit: string | null;
   category: string | null;
-  checked: boolean;
+  checked: boolean | number;
   source: string;
-  listStatus: string;
+  list_status: string;
 };
 
 export default function CoursesPage() {
@@ -79,7 +79,7 @@ export default function CoursesPage() {
     return groups;
   }, [items]);
 
-  const checkedCount = items.filter((i) => i.checked).length;
+  const checkedCount = items.filter((i) => !!i.checked).length;
   const totalCount = items.length;
   const progress = totalCount > 0 ? (checkedCount / totalCount) * 100 : 0;
 
@@ -191,7 +191,7 @@ export default function CoursesPage() {
                   <CategoryIcon category={category} size={16} />
                   {category}
                   <span className="text-muted font-normal">
-                    {categoryItems.filter((i) => i.checked).length}/
+                    {categoryItems.filter((i) => !!i.checked).length}/
                     {categoryItems.length}
                   </span>
                 </h3>
@@ -200,17 +200,17 @@ export default function CoursesPage() {
                 {categoryItems.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => toggleItem(item.id, item.checked)}
+                    onClick={() => toggleItem(item.id, !!item.checked)}
                     className="flex items-center gap-3 px-4 py-3 w-full text-left hover:bg-card-hover transition-colors"
                   >
                     <div
                       className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs transition-colors ${
-                        item.checked
+                        !!item.checked
                           ? "bg-success border-success text-white"
                           : "border-border hover:border-primary"
                       }`}
                     >
-                      {item.checked && (
+                      {!!item.checked && (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                           <polyline points="20 6 9 17 4 12"/>
                         </svg>
@@ -218,12 +218,12 @@ export default function CoursesPage() {
                     </div>
                     <span
                       className={`flex-1 text-sm ${
-                        item.checked
+                        !!item.checked
                           ? "line-through text-muted"
                           : "text-foreground"
                       }`}
                     >
-                      {item.productName}
+                      {item.product_name}
                     </span>
                     {item.quantity && (
                       <span className="text-xs text-muted">

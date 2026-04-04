@@ -27,13 +27,34 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
+/* Hide scrollbar on body/html — pages use internal scrollboxes */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
 }
-::-webkit-scrollbar-track {
-  background: var(--color-background);
+html, body {
+  scrollbar-width: none;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
+
+/* Scrollbars — vertes et fines, pour les scrollbox internes */
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-hover);
+}
+
+/* Firefox — scrollbox internes seulement */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) transparent;
 }

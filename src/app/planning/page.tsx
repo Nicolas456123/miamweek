@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getMonday, DAYS, MEAL_TYPES, MEAL_SLOTS } from "@/lib/utils";
 
@@ -20,49 +20,45 @@ type MealEntry = {
   meal_type: string;
   recipe_id: number | null;
   custom_name: string | null;
-  // joined from recipe
   recipeName?: string;
   recipeCategory?: string;
 };
 
-type ViewMode = "today" | "week" | "next";
-
-type DayConfig = {
-  mode: "cook" | "skip" | "out"; // cook=normal, skip=pas de cuisine, out=resto/dehors
+type MealConfig = {
+  mode: "cook" | "skip";
   persons: number;
 };
 
-const DEFAULT_DAY: DayConfig = { mode: "cook", persons: 2 };
+const DEFAULT_LUNCH: MealConfig = { mode: "skip", persons: 1 };
+const DEFAULT_DINNER: MealConfig = { mode: "cook", persons: 2 };
 
 export default function PlanningPage() {
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [viewAll, setViewAll] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [addingSlot, setAddingSlot] = useState<{
     day: number;
     type: string;
+    weekStart: string;
   } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [customName, setCustomName] = useState("");
-  const [dayConfigs, setDayConfigs] = useState<Record<number, DayConfig>>({});
+  const [mealConfigs, setMealConfigs] = useState<Record<string, MealConfig>>({});
   const [autoFilling, setAutoFilling] = useState(false);
+  const todayRef = useRef<HTMLDivElement>(null);
+  const scrollBoxRef = useRef<HTMLDivElement>(null);
 
-  const getDayConfig = (day: number): DayConfig => dayConfigs[day] || DEFAULT_DAY;
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
 
-  const setDayMode = (day: number, mode: "cook" | "skip" | "out") => {
-    setDayConfigs((prev) => ({
-      ...prev,
-      [day]: { ...getDayConfig(day), mode },
-    }));
-  };
-
-  const setDayPersons = (day: number, persons: number) => {
-    setDayConfigs((prev) => ({
-      ...prev,
-      [day]: { ...getDayConfig(day), persons: Math.max(1, persons) },
-    }));
-  };
+  const todayDayOfWeek = useMemo(() => {
+    const day = today.getDay();
+    return day === 0 ? 6 : day - 1;
+  }, [today]);
 
   const currentMonday = useMemo(() => {
     const d = new Date();
@@ -70,18 +66,53 @@ export default function PlanningPage() {
     return getMonday(d);
   }, [weekOffset]);
 
-  const todayDayOfWeek = useMemo(() => {
-    const d = new Date();
-    const day = d.getDay();
-    return day === 0 ? 6 : day - 1; // 0=lundi ... 6=dimanche
-  }, []);
+  const getMealConfig = (day: number, meal: "lunch" | "dinner"): MealConfig =>
+    mealConfigs[`${day}_${meal}`] || (meal === "lunch" ? DEFAULT_LUNCH : DEFAULT_DINNER);
+
+  const toggleMealMode = (day: number, meal: "lunch" | "dinner") => {
+    const key = `${day}_${meal}`;
+    const current = getMealConfig(day, meal);
+    setMealConfigs((prev) => ({
+      ...prev,
+      [key]: { ...current, mode: current.mode === "cook" ? "skip" : "cook" },
+    }));
+  };
+
+  const setMealPersons = (day: number, meal: "lunch" | "dinner", persons: number) => {
+    const key = `${day}_${meal}`;
+    setMealConfigs((prev) => ({
+      ...prev,
+      [key]: { ...getMealConfig(day, meal), persons: Math.max(1, persons) },
+    }));
+  };
 
   const fetchMeals = useCallback(() => {
-    fetch(`/api/meal-plan?weekStart=${currentMonday}`)
-      .then((r) => r.json())
-      .then((data) => setMeals(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  }, [currentMonday]);
+    if (viewAll) {
+      // Fetch current + next week
+      const thisMonday = getMonday(new Date());
+      const nextMondayDate = new Date(thisMonday);
+      nextMondayDate.setDate(nextMondayDate.getDate() + 7);
+      const nextMonday = nextMondayDate.toISOString().split("T")[0];
+
+      Promise.all([
+        fetch(`/api/meal-plan?weekStart=${thisMonday}`).then((r) => r.json()),
+        fetch(`/api/meal-plan?weekStart=${nextMonday}`).then((r) => r.json()),
+      ])
+        .then(([w1, w2]) => {
+          const all = [
+            ...(Array.isArray(w1) ? w1 : []),
+            ...(Array.isArray(w2) ? w2 : []),
+          ];
+          setMeals(all);
+        })
+        .catch(console.error);
+    } else {
+      fetch(`/api/meal-plan?weekStart=${currentMonday}`)
+        .then((r) => r.json())
+        .then((data) => setMeals(Array.isArray(data) ? data : []))
+        .catch(console.error);
+    }
+  }, [currentMonday, viewAll]);
 
   useEffect(() => {
     fetchMeals();
@@ -94,9 +125,21 @@ export default function PlanningPage() {
       .catch(console.error);
   }, []);
 
+  // Auto-scroll to today when viewing all days
+  useEffect(() => {
+    if (viewAll && todayRef.current && scrollBoxRef.current) {
+      setTimeout(() => {
+        const container = scrollBoxRef.current!;
+        const card = todayRef.current!;
+        container.scrollTop = card.offsetTop - container.offsetTop;
+      }, 100);
+    }
+  }, [viewAll]);
+
   const addMeal = async (
     dayOfWeek: number,
     mealType: string,
+    weekStart: string,
     recipeId?: number,
     name?: string
   ) => {
@@ -104,7 +147,7 @@ export default function PlanningPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        weekStart: currentMonday,
+        weekStart,
         dayOfWeek,
         mealType,
         recipeId: recipeId || null,
@@ -122,7 +165,13 @@ export default function PlanningPage() {
     fetchMeals();
   };
 
-  // Add all ingredients from planned meals to shopping list
+  const removeMenuGroup = async (mealIds: number[]) => {
+    for (const id of mealIds) {
+      await fetch(`/api/meal-plan?id=${id}`, { method: "DELETE" });
+    }
+    fetchMeals();
+  };
+
   const addWeekToList = async () => {
     const recipeMeals = meals.filter((m) => m.recipe_id);
     if (recipeMeals.length === 0) return;
@@ -156,23 +205,28 @@ export default function PlanningPage() {
   const autoFillWeek = async () => {
     setAutoFilling(true);
     try {
-      // Build context about each day
       const dayDescriptions = DAYS.map((name, i) => {
-        const config = getDayConfig(i);
-        const existing = getMealsForPeriod(i, "lunch").length + getMealsForPeriod(i, "dinner").length;
-        if (config.mode === "skip") return `${name}: pas de cuisine`;
-        if (config.mode === "out") return `${name}: restaurant/dehors`;
-        return `${name}: cuisine pour ${config.persons} personne(s)${existing > 0 ? ` (${existing} repas déjà planifiés)` : ""}`;
+        const lunchConfig = getMealConfig(i, "lunch");
+        const dinnerConfig = getMealConfig(i, "dinner");
+        const lunchExisting = getMealsForPeriod(i, currentMonday, "lunch").length;
+        const dinnerExisting = getMealsForPeriod(i, currentMonday, "dinner").length;
+
+        const lunchDesc = lunchConfig.mode === "skip" ? "pas de repas"
+          : `cuisine pour ${lunchConfig.persons} personne(s)${lunchExisting > 0 ? ` (${lunchExisting} repas déjà)` : ""}`;
+
+        const dinnerDesc = dinnerConfig.mode === "skip" ? "pas de repas"
+          : `cuisine pour ${dinnerConfig.persons} personne(s)${dinnerExisting > 0 ? ` (${dinnerExisting} repas déjà)` : ""}`;
+
+        return `${name}: Midi=${lunchDesc}, Soir=${dinnerDesc}`;
       }).join("\n");
 
-      // Get available recipes
       const recipeNames = recipes.map((r) => `${r.name} (${r.category || "?"}, ${r.servings} pers.)`).join(", ");
 
       const res = await fetch("/api/ai/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: `Complète ce planning de repas pour la semaine. Voici le contexte de chaque jour :\n${dayDescriptions}\n\nRecettes disponibles : ${recipeNames}\n\nPour chaque jour où il faut cuisiner et où il n'y a pas encore de repas, propose un plat pour le midi et un pour le soir. Varie les recettes, équilibre les types de cuisine. Réponds UNIQUEMENT en JSON :\n[{"dayOfWeek": 0, "mealType": "lunch_plat", "name": "Nom du plat"}, ...]`,
+          prompt: `Complète ce planning de repas pour la semaine. Voici le contexte de chaque jour :\n${dayDescriptions}\n\nRecettes disponibles : ${recipeNames}\n\nPour chaque repas où il faut cuisiner et où il n'y a pas encore de repas, propose un plat. Varie les recettes, équilibre les types de cuisine. Réponds UNIQUEMENT en JSON :\n[{"dayOfWeek": 0, "mealType": "lunch_plat", "name": "Nom du plat"}, ...]`,
         }),
       });
       const data = await res.json();
@@ -180,15 +234,14 @@ export default function PlanningPage() {
 
       if (Array.isArray(suggestions)) {
         for (const meal of suggestions) {
-          const config = getDayConfig(meal.dayOfWeek);
+          const period = meal.mealType?.startsWith("lunch") ? "lunch" : "dinner";
+          const config = getMealConfig(meal.dayOfWeek, period as "lunch" | "dinner");
           if (config.mode !== "cook") continue;
-          // Check if slot already has a meal
           const existing = meals.filter(
-            (m) => m.day_of_week === meal.dayOfWeek && m.meal_type === meal.mealType
+            (m) => m.day_of_week === meal.dayOfWeek && m.meal_type === meal.mealType && m.week_start === currentMonday
           );
           if (existing.length > 0) continue;
 
-          // Try to match with a real recipe
           const matchedRecipe = recipes.find(
             (r) => r.name.toLowerCase() === (meal.name || "").toLowerCase()
           );
@@ -213,14 +266,9 @@ export default function PlanningPage() {
     setAutoFilling(false);
   };
 
-  const getMealsForSlot = (day: number, type: string) =>
+  const getMealsForPeriod = (day: number, weekStart: string, period: "lunch" | "dinner") =>
     meals.filter(
-      (m) => m.day_of_week === day && m.meal_type === type
-    );
-
-  const getMealsForPeriod = (day: number, period: "lunch" | "dinner") =>
-    meals.filter(
-      (m) => m.day_of_week === day && (m.meal_type === period || m.meal_type.startsWith(`${period}_`))
+      (m) => m.day_of_week === day && m.week_start === weekStart && (m.meal_type === period || m.meal_type.startsWith(`${period}_`))
     );
 
   const getSlotLabel = (mealType: string) => {
@@ -237,55 +285,284 @@ export default function PlanningPage() {
     return "?";
   };
 
-  const getRecipeCategory = (meal: MealEntry) => {
-    if (meal.recipe_id) {
-      return recipes.find((r) => r.id === meal.recipe_id)?.category || null;
-    }
-    return null;
-  };
-
   const filteredRecipes = useMemo(() => {
     if (!recipeSearch) return recipes;
     const s = recipeSearch.toLowerCase();
     return recipes.filter((r) => r.name.toLowerCase().includes(s));
   }, [recipes, recipeSearch]);
 
-  // Determine visible days based on view mode
-  const visibleDays = useMemo(() => {
-    if (viewMode === "today") return [todayDayOfWeek];
-    return [0, 1, 2, 3, 4, 5, 6];
-  }, [viewMode, todayDayOfWeek]);
-
-  const weekLabel = useMemo(() => {
-    const monday = new Date(currentMonday);
-    const sunday = new Date(monday);
-    sunday.setDate(sunday.getDate() + 6);
-    const fmt = (d: Date) =>
-      d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-    return `${fmt(monday)} — ${fmt(sunday)}`;
-  }, [currentMonday]);
-
-  const getDayDate = (dayIndex: number) => {
-    const d = new Date(currentMonday);
-    d.setDate(d.getDate() + dayIndex);
-    return d.toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "short",
-    });
+  const groupMealsForPeriod = (day: number, weekStart: string, period: "lunch" | "dinner") => {
+    const periodMeals = getMealsForPeriod(day, weekStart, period);
+    const subSlotMeals = periodMeals.filter((m) => m.meal_type.includes("_"));
+    const standaloneMeals = periodMeals.filter((m) => !m.meal_type.includes("_"));
+    const menuGroup = subSlotMeals.length > 0 ? subSlotMeals : null;
+    return { menuGroup, standaloneMeals };
   };
 
+  // Build list of days to display
+  const displayDays = useMemo(() => {
+    if (!viewAll) {
+      // Just today
+      return [{
+        date: today,
+        dayOfWeek: todayDayOfWeek,
+        weekStart: currentMonday,
+        isToday: true,
+        isPast: false,
+      }];
+    }
+
+    // All days: from today to 13 days ahead (2 weeks)
+    const days: { date: Date; dayOfWeek: number; weekStart: string; isToday: boolean; isPast: boolean }[] = [];
+    // Include a few past days for context (from Monday of current week)
+    const mondayDate = new Date(currentMonday);
+    const startDate = mondayDate < today ? mondayDate : today;
+
+    for (let i = 0; i < 21; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const dow = d.getDay();
+      const dayOfWeek = dow === 0 ? 6 : dow - 1;
+      const ws = getMonday(d);
+      const isToday = d.toDateString() === today.toDateString();
+      const isPast = d < today && !isToday;
+
+      days.push({ date: d, dayOfWeek, weekStart: ws, isToday, isPast });
+    }
+    return days;
+  }, [viewAll, today, todayDayOfWeek, currentMonday]);
+
   const filledSlots = meals.length;
-  const totalSlots = 14; // 7 days x 2 meals
-  const fillPercent = Math.round((filledSlots / totalSlots) * 100);
+
+  // Render a single day card
+  const renderDayCard = (day: typeof displayDays[0]) => {
+    const dayLabel = day.date.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+
+    return (
+      <div
+        key={`${day.weekStart}-${day.dayOfWeek}`}
+        ref={day.isToday ? todayRef : undefined}
+        className={`bg-card border rounded-xl overflow-hidden transition-opacity ${
+          day.isToday
+            ? "border-primary border-2 shadow-sm"
+            : day.isPast
+              ? "border-border opacity-60"
+              : "border-border"
+        }`}
+      >
+        {/* Day header */}
+        <div
+          className={`px-4 py-2.5 flex items-center gap-2 ${
+            day.isToday ? "bg-primary-light" : "bg-card-hover"
+          }`}
+        >
+          <span className={`text-sm font-bold capitalize ${day.isToday ? "text-primary" : "text-foreground"}`}>
+            {dayLabel}
+          </span>
+          {day.isToday && (
+            <span className="text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">
+              Aujourd&apos;hui
+            </span>
+          )}
+        </div>
+
+        {/* Meal slots */}
+        <div className="grid grid-cols-2 divide-x divide-border">
+          {(["lunch", "dinner"] as const).map((mealType) => {
+            const config = getMealConfig(day.dayOfWeek, mealType);
+            const { menuGroup, standaloneMeals } = groupMealsForPeriod(day.dayOfWeek, day.weekStart, mealType);
+            const isAdding =
+              addingSlot?.day === day.dayOfWeek &&
+              addingSlot?.type === mealType &&
+              addingSlot?.weekStart === day.weekStart;
+
+            return (
+              <div key={mealType} className="min-h-[80px]">
+                {/* Meal header */}
+                <div className="px-3 pt-2 pb-1 flex items-center justify-between">
+                  <p className="text-xs text-muted font-medium">
+                    {MEAL_TYPES[mealType]}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      title={config.mode === "cook" ? "Désactiver ce repas" : "Activer ce repas"}
+                      onClick={() => toggleMealMode(day.dayOfWeek, mealType)}
+                      className={`w-6 h-6 rounded-md text-xs flex items-center justify-center transition-colors ${
+                        config.mode === "cook"
+                          ? "bg-primary text-white"
+                          : "bg-background border border-border text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {config.mode === "cook" ? "👨‍🍳" : "—"}
+                    </button>
+                    {config.mode === "cook" && (
+                      <div className="flex items-center gap-0.5 ml-1 bg-background border border-border rounded-md px-0.5">
+                        <button
+                          onClick={() => setMealPersons(day.dayOfWeek, mealType, config.persons - 1)}
+                          className="w-4 h-4 text-[10px] font-bold text-muted hover:text-foreground"
+                        >
+                          -
+                        </button>
+                        <span className="text-[10px] font-semibold w-3 text-center">{config.persons}</span>
+                        <button
+                          onClick={() => setMealPersons(day.dayOfWeek, mealType, config.persons + 1)}
+                          className="w-4 h-4 text-[10px] font-bold text-muted hover:text-foreground"
+                        >
+                          +
+                        </button>
+                        <span className="text-[8px] text-muted">p.</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Meal content */}
+                {config.mode === "skip" ? (
+                  <div className="px-3 py-3 text-center text-xs text-muted italic bg-gray-50">
+                    —
+                  </div>
+                ) : (
+                  <div className="px-3 pb-3">
+                    {/* Composed menu group */}
+                    {menuGroup && menuGroup.length > 0 && (
+                      <div className="group mb-1.5 bg-background border border-border rounded-lg overflow-hidden">
+                        <div className="divide-y divide-border/50">
+                          {menuGroup
+                            .sort((a, b) => {
+                              const order = ["entree", "plat", "dessert", "boisson"];
+                              const aIdx = order.findIndex((o) => a.meal_type.endsWith(o));
+                              const bIdx = order.findIndex((o) => b.meal_type.endsWith(o));
+                              return aIdx - bIdx;
+                            })
+                            .map((meal) => {
+                              const slotInfo = getSlotLabel(meal.meal_type);
+                              return (
+                                <div
+                                  key={meal.id}
+                                  className="flex items-center gap-2 px-2.5 py-1.5 text-sm"
+                                >
+                                  <span className={`text-xs ${slotInfo.color}`}>
+                                    {slotInfo.icon}
+                                  </span>
+                                  <span className="font-medium flex-1">
+                                    {getRecipeName(meal)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                        <div className="flex justify-end px-2 py-1 bg-gray-50/50">
+                          <button
+                            onClick={() => removeMenuGroup(menuGroup.map((m) => m.id))}
+                            className="text-muted hover:text-danger text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            Supprimer le menu
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Standalone meals */}
+                    {standaloneMeals.map((meal) => (
+                      <div
+                        key={meal.id}
+                        className="group flex items-center gap-2 mb-1.5"
+                      >
+                        <div className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-sm">
+                          <span className="font-medium">
+                            {getRecipeName(meal)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => removeMeal(meal.id)}
+                          className="text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Add meal */}
+                    {isAdding ? (
+                      <div className="mt-1 space-y-2">
+                        <input
+                          type="text"
+                          value={recipeSearch}
+                          onChange={(e) => setRecipeSearch(e.target.value)}
+                          placeholder="Chercher une recette..."
+                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          autoFocus
+                        />
+                        {recipeSearch && (
+                          <div className="max-h-40 overflow-y-auto space-y-0.5">
+                            {filteredRecipes.slice(0, 8).map((r) => (
+                              <button
+                                key={r.id}
+                                onClick={() => addMeal(day.dayOfWeek, mealType, day.weekStart, r.id)}
+                                className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-primary-light hover:text-primary transition-colors"
+                              >
+                                <span className="font-medium">{r.name}</span>
+                                {r.category && (
+                                  <span className="ml-1 text-muted">— {r.category}</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            value={customName}
+                            onChange={(e) => setCustomName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && customName.trim())
+                                addMeal(day.dayOfWeek, mealType, day.weekStart, undefined, customName);
+                            }}
+                            placeholder="Ou tape un nom libre..."
+                            className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-xs"
+                          />
+                          <button
+                            onClick={() => {
+                              setAddingSlot(null);
+                              setRecipeSearch("");
+                              setCustomName("");
+                            }}
+                            className="text-xs text-muted px-2"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setAddingSlot({ day: day.dayOfWeek, type: mealType, weekStart: day.weekStart })}
+                        className="w-full mt-1 py-1.5 border border-dashed border-border rounded-lg text-xs text-muted hover:border-primary hover:text-primary transition-colors"
+                      >
+                        + Ajouter
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-bold">Planning repas</h1>
-          <p className="text-sm text-muted">{weekLabel}</p>
-        </div>
+      <div className="flex items-center justify-between mb-3 shrink-0">
+        <h1 className="text-xl font-bold">Planning repas</h1>
         <div className="flex gap-2">
           <Link
             href="/menu"
@@ -311,297 +588,31 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* View mode + week nav */}
-      <div className="flex gap-2 mb-4">
+      {/* View toggle */}
+      <div className="flex gap-2 mb-3 shrink-0">
         <div className="flex bg-card border border-border rounded-xl overflow-hidden">
-          {(
-            [
-              { key: "today", label: "Aujourd'hui" },
-              { key: "week", label: "Semaine" },
-              { key: "next", label: "S. prochaine" },
-            ] as const
-          ).map((v) => (
-            <button
-              key={v.key}
-              onClick={() => {
-                setViewMode(v.key);
-                if (v.key === "today" || v.key === "week") setWeekOffset(0);
-                if (v.key === "next") setWeekOffset(1);
-              }}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                viewMode === v.key
-                  ? "bg-primary text-white"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              {v.label}
-            </button>
-          ))}
+          <button
+            onClick={() => setViewAll(false)}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              !viewAll ? "bg-primary text-white" : "text-muted hover:text-foreground"
+            }`}
+          >
+            Aujourd&apos;hui
+          </button>
+          <button
+            onClick={() => setViewAll(true)}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              viewAll ? "bg-primary text-white" : "text-muted hover:text-foreground"
+            }`}
+          >
+            Tous les jours
+          </button>
         </div>
-        {viewMode === "week" && (
-          <div className="flex gap-1 ml-auto">
-            <button
-              onClick={() => setWeekOffset((w) => w - 1)}
-              className="px-3 py-2 bg-card border border-border rounded-xl text-sm hover:shadow-sm"
-            >
-              ← Sem. préc.
-            </button>
-            {weekOffset !== 0 && (
-              <button
-                onClick={() => setWeekOffset(0)}
-                className="px-3 py-2 bg-card border border-border rounded-xl text-sm text-primary font-medium hover:shadow-sm"
-              >
-                Aujourd&apos;hui
-              </button>
-            )}
-            <button
-              onClick={() => setWeekOffset((w) => w + 1)}
-              className="px-3 py-2 bg-card border border-border rounded-xl text-sm hover:shadow-sm"
-            >
-              Sem. suiv. →
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Progress bar */}
-      {viewMode !== "today" && (
-        <div className="bg-card border border-border rounded-xl p-3 mb-4">
-          <div className="flex justify-between text-xs text-muted mb-1">
-            <span>
-              {filledSlots}/{totalSlots} repas planifiés
-            </span>
-            <span>{fillPercent}%</span>
-          </div>
-          <div className="w-full bg-border rounded-full h-2 overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-300"
-              style={{ width: `${fillPercent}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Planning grid */}
-      <div className="space-y-2">
-        {visibleDays.map((dayIndex) => {
-          const isToday =
-            weekOffset === 0 && dayIndex === todayDayOfWeek;
-
-          return (
-            <div
-              key={dayIndex}
-              className={`bg-card border rounded-xl overflow-hidden ${
-                isToday ? "border-primary border-2 shadow-sm" : "border-border"
-              }`}
-            >
-              {/* Day header */}
-              {(() => {
-                const config = getDayConfig(dayIndex);
-                return (
-                  <div
-                    className={`px-4 py-2 flex items-center justify-between gap-2 ${
-                      isToday ? "bg-primary-light" : config.mode !== "cook" ? "bg-gray-100" : "bg-card-hover"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`text-sm font-bold shrink-0 ${isToday ? "text-primary" : "text-foreground"}`}>
-                        {DAYS[dayIndex]}
-                      </span>
-                      <span className="text-xs text-muted shrink-0">{getDayDate(dayIndex)}</span>
-                      {isToday && (
-                        <span className="text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium shrink-0">
-                          Aujourd&apos;hui
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Mode buttons */}
-                      {([
-                        { mode: "cook" as const, icon: "👨‍🍳", tip: "Cuisine" },
-                        { mode: "skip" as const, icon: "🚫", tip: "Pas de cuisine" },
-                        { mode: "out" as const, icon: "🍽️", tip: "Resto/dehors" },
-                      ]).map((m) => (
-                        <button
-                          key={m.mode}
-                          title={m.tip}
-                          onClick={() => setDayMode(dayIndex, m.mode)}
-                          className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center transition-colors ${
-                            config.mode === m.mode
-                              ? "bg-primary text-white"
-                              : "bg-card border border-border text-muted hover:text-foreground"
-                          }`}
-                        >
-                          {m.icon}
-                        </button>
-                      ))}
-                      {/* Persons */}
-                      {config.mode === "cook" && (
-                        <div className="flex items-center gap-0.5 ml-1 bg-card border border-border rounded-lg px-1">
-                          <button
-                            onClick={() => setDayPersons(dayIndex, config.persons - 1)}
-                            className="w-5 h-5 text-xs font-bold text-muted hover:text-foreground"
-                          >
-                            -
-                          </button>
-                          <span className="text-xs font-semibold w-4 text-center">{config.persons}</span>
-                          <button
-                            onClick={() => setDayPersons(dayIndex, config.persons + 1)}
-                            className="w-5 h-5 text-xs font-bold text-muted hover:text-foreground"
-                          >
-                            +
-                          </button>
-                          <span className="text-[10px] text-muted">p.</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Day content */}
-              {getDayConfig(dayIndex).mode === "skip" ? (
-                <div className="px-4 py-4 text-center text-sm text-muted italic bg-gray-50">
-                  Pas de cuisine ce jour
-                </div>
-              ) : getDayConfig(dayIndex).mode === "out" ? (
-                <div className="px-4 py-4 text-center text-sm text-muted italic bg-gray-50">
-                  🍽️ Restaurant / dehors
-                </div>
-              ) : null}
-
-              {/* Meal slots (only if cooking) */}
-              {getDayConfig(dayIndex).mode === "cook" && (
-              <div className="grid grid-cols-2 divide-x divide-border">
-                {(["lunch", "dinner"] as const).map((mealType) => {
-                  const periodMeals = getMealsForPeriod(dayIndex, mealType);
-                  const isAdding =
-                    addingSlot?.day === dayIndex &&
-                    addingSlot?.type === mealType;
-
-                  return (
-                    <div key={mealType} className="p-3 min-h-[80px]">
-                      <p className="text-xs text-muted font-medium mb-2">
-                        {MEAL_TYPES[mealType]}
-                      </p>
-
-                      {/* Existing meals with sub-category labels */}
-                      {periodMeals.map((meal) => {
-                        const slotInfo = getSlotLabel(meal.meal_type);
-                        const isSubSlot = meal.meal_type.includes("_");
-                        return (
-                          <div
-                            key={meal.id}
-                            className="group flex items-center gap-2 mb-1.5"
-                          >
-                            <div className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-sm">
-                              {isSubSlot && (
-                                <span className={`text-xs ${slotInfo.color} mr-1`}>
-                                  {slotInfo.icon}
-                                </span>
-                              )}
-                              <span className="font-medium">
-                                {getRecipeName(meal)}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => removeMeal(meal.id)}
-                              className="text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                            >
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                              </svg>
-                            </button>
-                          </div>
-                        );
-                      })}
-
-                      {/* Add meal */}
-                      {isAdding ? (
-                        <div className="mt-1 space-y-2">
-                          <input
-                            type="text"
-                            value={recipeSearch}
-                            onChange={(e) => setRecipeSearch(e.target.value)}
-                            placeholder="Chercher une recette..."
-                            className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-                            autoFocus
-                          />
-                          {recipeSearch && (
-                            <div className="max-h-40 overflow-y-auto space-y-0.5">
-                              {filteredRecipes.slice(0, 8).map((r) => (
-                                <button
-                                  key={r.id}
-                                  onClick={() =>
-                                    addMeal(dayIndex, mealType, r.id)
-                                  }
-                                  className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-primary-light hover:text-primary transition-colors"
-                                >
-                                  <span className="font-medium">{r.name}</span>
-                                  {r.category && (
-                                    <span className="ml-1 text-muted">
-                                      — {r.category}
-                                    </span>
-                                  )}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex gap-1">
-                            <input
-                              type="text"
-                              value={customName}
-                              onChange={(e) => setCustomName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && customName.trim())
-                                  addMeal(
-                                    dayIndex,
-                                    mealType,
-                                    undefined,
-                                    customName
-                                  );
-                              }}
-                              placeholder="Ou tape un nom libre..."
-                              className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-xs"
-                            />
-                            <button
-                              onClick={() => {
-                                setAddingSlot(null);
-                                setRecipeSearch("");
-                                setCustomName("");
-                              }}
-                              className="text-xs text-muted px-2"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() =>
-                            setAddingSlot({ day: dayIndex, type: mealType })
-                          }
-                          className="w-full mt-1 py-1.5 border border-dashed border-border rounded-lg text-xs text-muted hover:border-primary hover:text-primary transition-colors"
-                        >
-                          + Ajouter
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              )}
-            </div>
-          );
-        })}
+      {/* Days */}
+      <div ref={scrollBoxRef} className="space-y-2 overflow-y-auto flex-1 min-h-0 pb-4">
+        {displayDays.map((day) => renderDayCard(day))}
       </div>
     </div>
   );

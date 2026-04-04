@@ -133,7 +133,17 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   const body = await request.json();
-  const { id } = body;
+  const { id, all, status } = body;
+
+  // Bulk delete: all items (optionally filtered by status)
+  if (all) {
+    if (status) {
+      await query("DELETE FROM list_items WHERE list_status = ?", [status]);
+    } else {
+      await query("DELETE FROM list_items");
+    }
+    return Response.json({ success: true });
+  }
 
   if (!id) {
     return Response.json({ error: "id is required" }, { status: 400 });

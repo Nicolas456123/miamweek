@@ -126,13 +126,11 @@ export default function MenuPage() {
     setAddedToList(true);
   };
 
-  // Compute the actual date from the grid index (0-13)
+  // Compute the actual date from the grid index (0-13), starting from today
   const getDateFromGridIndex = (idx: number) => {
     const today = new Date();
-    const todayDow = today.getDay();
-    const startOffset = todayDow === 0 ? -6 : 1 - todayDow;
     const d = new Date(today);
-    d.setDate(today.getDate() + startOffset + idx);
+    d.setDate(today.getDate() + idx);
     return d;
   };
 
@@ -398,12 +396,10 @@ export default function MenuPage() {
             {(() => {
               // Build 14 days starting from today
               const today = new Date();
-              const todayDow = today.getDay();
-              const startOffset = todayDow === 0 ? -6 : 1 - todayDow; // Monday of this week
               const days: { date: Date; dayOfWeek: number; weekStart: string; label: string; dateLabel: string; isToday: boolean }[] = [];
               for (let i = 0; i < 14; i++) {
                 const d = new Date(today);
-                d.setDate(today.getDate() + startOffset + i);
+                d.setDate(today.getDate() + i);
                 const dow = d.getDay();
                 const dayOfWeek = dow === 0 ? 6 : dow - 1; // 0=lundi
                 const monday = new Date(d);

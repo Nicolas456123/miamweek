@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { PRODUCT_CATEGORIES } from "@/lib/utils";
 import { CategoryIcon } from "@/components/category-icons";
+import { CategoryFilter, getFilterCategories } from "@/components/category-filter";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 
 type Product = {
@@ -28,6 +28,14 @@ type ListItem = {
   source_recipe: string | null;
 };
 
+type PantryItem = {
+  product_id: number | null;
+  product_name: string;
+  quantity: number | null;
+  unit: string | null;
+  location: string | null;
+};
+
 // Smart step size based on unit and default quantity
 function getStep(unit: string, defaultQty: number | null): number {
   const u = unit.toLowerCase();
@@ -47,9 +55,66 @@ function fmtQty(qty: number): string {
   return s;
 }
 
+function locationLabel(loc: string | null): string {
+  if (loc === "frigo") return "Frigo";
+  if (loc === "congélateur") return "Congél.";
+  if (loc === "placard") return "Placard";
+  return "";
+}
+
+// Normalize units to a base for comparison (g, ml, pcs)
+function normalizeToBase(qty: number, unit: string): { qty: number; base: string } | null {
+  const u = unit.toLowerCase();
+  if (u === "g") return { qty, base: "g" };
+  if (u === "kg") return { qty: qty * 1000, base: "g" };
+  if (u === "ml") return { qty, base: "ml" };
+  if (u === "l") return { qty: qty * 1000, base: "ml" };
+  if (u === "cl") return { qty: qty * 10, base: "ml" };
+  if (u === "pcs" || u === "lot" || u === "bout." || u === "boîte") return { qty, base: u };
+  return { qty, base: u };
+}
+
+function unitsCompatible(unitA: string, unitB: string): boolean {
+  const a = normalizeToBase(1, unitA);
+  const b = normalizeToBase(1, unitB);
+  if (!a || !b) return false;
+  return a.base === b.base;
+}
+
+type StockStatus = "enough" | "partial" | "incompatible" | "unknown";
+
+function getStockStatus(
+  needQty: number | null,
+  needUnit: string | null,
+  stockQty: number | null,
+  stockUnit: string | null
+): { status: StockStatus; label: string } {
+  if (!stockQty || !stockUnit || !needUnit) {
+    return { status: "unknown", label: "En stock" };
+  }
+
+  if (!unitsCompatible(needUnit, stockUnit)) {
+    // Can't compare - just show what's in stock with its own unit
+    return {
+      status: "incompatible",
+      label: `En stock : ${fmtQty(stockQty)} ${stockUnit}`,
+    };
+  }
+
+  const need = normalizeToBase(needQty || 0, needUnit);
+  const stock = normalizeToBase(stockQty, stockUnit);
+  if (!need || !stock) return { status: "unknown", label: "En stock" };
+
+  if (stock.qty >= need.qty) {
+    return { status: "enough", label: `En stock : ${fmtQty(stockQty)} ${stockUnit} (suffisant)` };
+  }
+  return { status: "partial", label: `En stock : ${fmtQty(stockQty)} ${stockUnit} (insuffisant)` };
+}
+
 export default function ListePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [listItems, setListItems] = useState<ListItem[]>([]);
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [customName, setCustomName] = useState("");
@@ -72,6 +137,10 @@ export default function ListePage() {
       .then((r) => r.json())
       .then((data) => setProducts(Array.isArray(data) ? data : []))
       .catch(console.error);
+    fetch("/api/pantry")
+      .then((r) => r.json())
+      .then((data) => setPantryItems(Array.isArray(data) ? data : []))
+      .catch(console.error);
     fetchList();
 
     // Auto-refresh every 5s for multi-user sync (only when online)
@@ -80,6 +149,18 @@ export default function ListePage() {
     }, 5000);
     return () => clearInterval(interval);
   }, [fetchList]);
+
+  // Pantry lookup by product name (lowercase)
+  const pantryByName = useMemo(() => {
+    const map: Record<string, PantryItem> = {};
+    for (const p of pantryItems) {
+      map[p.product_name.toLowerCase()] = p;
+    }
+    return map;
+  }, [pantryItems]);
+
+  const getPantryInfo = (name: string): PantryItem | undefined =>
+    pantryByName[name.toLowerCase()];
 
   let nextTempId = -1;
 
@@ -181,6 +262,15 @@ export default function ListePage() {
     });
   };
 
+  const clearAllItems = async () => {
+    setListItems([]);
+    await fetch("/api/list", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ all: true, status: "prep" }),
+    });
+  };
+
   const updateQuantity = (id: number, quantity: number) => {
     if (quantity <= 0) return removeItem(id);
     // Optimistic: update instantly
@@ -208,8 +298,9 @@ export default function ListePage() {
 
   const filteredProducts = useMemo(() => {
     let filtered = products;
-    if (activeCategory) {
-      filtered = filtered.filter((p) => p.category === activeCategory);
+    const filterCats = getFilterCategories(activeCategory);
+    if (filterCats) {
+      filtered = filtered.filter((p) => filterCats.includes(p.category));
     }
     if (search) {
       const s = search.toLowerCase();
@@ -233,11 +324,11 @@ export default function ListePage() {
   const isInList = (productId: number) => !!getListItem(productId);
 
   return (
-    <div>
+    <div className="flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
       {/* Offline banner */}
       {(!isOnline || queueSize > 0) && (
         <div
-          className={`mb-3 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between ${
+          className={`mb-3 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between shrink-0 ${
             !isOnline
               ? "bg-orange-100 text-orange-800 border border-orange-200"
               : "bg-blue-100 text-blue-800 border border-blue-200"
@@ -267,7 +358,7 @@ export default function ListePage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3 shrink-0">
         <h1 className="text-xl font-bold">Préparer ma liste</h1>
         {listItems.length > 0 && (
           <button
@@ -279,53 +370,31 @@ export default function ListePage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Search */}
+      <div className="mb-3 shrink-0">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un produit..."
+          className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+        />
+      </div>
+
+      {/* Category tabs */}
+      <div className="mb-3 shrink-0">
+        <CategoryFilter active={activeCategory} onChange={setActiveCategory} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Left: Product catalog */}
-        <div className="lg:col-span-2">
-          {/* Search */}
-          <div className="mb-3">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un produit..."
-              className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-            />
-          </div>
-
-          {/* Category tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-hide">
-            <button
-              onClick={() => setActiveCategory(null)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
-                !activeCategory
-                  ? "bg-primary text-white shadow-sm"
-                  : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
-              }`}
-            >
-              Tout
-            </button>
-            {PRODUCT_CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 ${
-                  activeCategory === cat
-                    ? "bg-primary text-white shadow-sm"
-                    : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
-                }`}
-              >
-                <CategoryIcon category={cat} size={20} />
-                {cat}
-              </button>
-            ))}
-          </div>
-
+        <div className="lg:col-span-2 overflow-y-auto min-h-0 pr-2">
           {/* Products grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {filteredProducts.map((product) => {
               const listItem = getListItem(product.id);
               const inList = !!listItem;
+              const pantryInfo = getPantryInfo(product.name);
               const presets = product.quantity_presets
                 ? (() => { try { return JSON.parse(product.quantity_presets!) as number[]; } catch { return null; } })()
                 : null;
@@ -398,6 +467,24 @@ export default function ListePage() {
                       {fmtQty(defaultQty)} {product.default_unit}
                     </p>
                   )}
+
+                  {/* In pantry indicator */}
+                  {pantryInfo && (() => {
+                    const listQty = listItem?.quantity ?? defaultQty;
+                    const listUnit = listItem?.unit ?? product.default_unit;
+                    const stock = getStockStatus(listQty, listUnit, pantryInfo.quantity, pantryInfo.unit);
+                    const colors = stock.status === "enough"
+                      ? "bg-green-100 text-green-700"
+                      : stock.status === "partial"
+                        ? "bg-orange-100 text-orange-700"
+                        : "bg-blue-100 text-blue-600";
+                    return (
+                      <div className={`absolute bottom-2 right-2 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${colors}`}>
+                        {stock.label}
+                      </div>
+                    );
+                  })()}
+
                   {inList && (
                     <div className="absolute top-2 right-2 w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -466,7 +553,9 @@ export default function ListePage() {
             groupedList={groupedList}
             updateQuantity={updateQuantity}
             removeItem={removeItem}
+            clearAllItems={clearAllItems}
             validateList={validateList}
+            getPantryInfo={getPantryInfo}
           />
         </div>
       </div>
@@ -497,20 +586,29 @@ export default function ListePage() {
                       {listItems.length}
                     </span>
                   </h2>
-                  <button
-                    onClick={() => setShowMobileList(false)}
-                    className="text-muted p-1"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={clearAllItems}
+                      className="text-xs text-danger hover:text-danger font-medium"
+                    >
+                      Tout vider
+                    </button>
+                    <button
+                      onClick={() => setShowMobileList(false)}
+                      className="text-muted p-1"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div className="p-4">
                   <ListContent
                     groupedList={groupedList}
                     updateQuantity={updateQuantity}
                     removeItem={removeItem}
+                    getPantryInfo={getPantryInfo}
                   />
                   <button
                     onClick={() => {
@@ -536,13 +634,17 @@ function ListPanel({
   groupedList,
   updateQuantity,
   removeItem,
+  clearAllItems,
   validateList,
+  getPantryInfo,
 }: {
   listItems: ListItem[];
   groupedList: Record<string, ListItem[]>;
   updateQuantity: (id: number, qty: number) => void;
   removeItem: (id: number) => void;
+  clearAllItems: () => void;
   validateList: () => void;
+  getPantryInfo: (name: string) => PantryItem | undefined;
 }) {
   return (
     <div
@@ -569,6 +671,14 @@ function ListPanel({
             {listItems.length}
           </span>
         </h2>
+        {listItems.length > 0 && (
+          <button
+            onClick={clearAllItems}
+            className="text-xs text-danger hover:text-danger font-medium"
+          >
+            Tout vider
+          </button>
+        )}
       </div>
 
       {listItems.length === 0 ? (
@@ -581,6 +691,7 @@ function ListPanel({
             groupedList={groupedList}
             updateQuantity={updateQuantity}
             removeItem={removeItem}
+            getPantryInfo={getPantryInfo}
           />
           <button
             onClick={validateList}
@@ -598,10 +709,12 @@ function ListContent({
   groupedList,
   updateQuantity,
   removeItem,
+  getPantryInfo,
 }: {
   groupedList: Record<string, ListItem[]>;
   updateQuantity: (id: number, qty: number) => void;
   removeItem: (id: number) => void;
+  getPantryInfo: (name: string) => PantryItem | undefined;
 }) {
   return (
     <div className="space-y-1 max-h-[60vh] overflow-y-auto">
@@ -615,6 +728,7 @@ function ListContent({
             </p>
             {items.map((item) => {
               const step = getStep(item.unit || "pcs", item.quantity);
+              const pantryInfo = getPantryInfo(item.product_name);
               return (
               <div
                 key={item.id}
@@ -629,6 +743,19 @@ function ListContent({
                       {item.source_recipe}
                     </span>
                   )}
+                  {pantryInfo && (() => {
+                    const stock = getStockStatus(item.quantity, item.unit, pantryInfo.quantity, pantryInfo.unit);
+                    const color = stock.status === "enough"
+                      ? "text-green-600"
+                      : stock.status === "partial"
+                        ? "text-orange-500"
+                        : "text-blue-500";
+                    return (
+                      <span className={`text-[10px] ${color} truncate block`}>
+                        {stock.label}{pantryInfo.location ? ` — ${locationLabel(pantryInfo.location)}` : ""}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-1">
                   <button

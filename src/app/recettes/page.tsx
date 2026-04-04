@@ -243,8 +243,8 @@ export default function RecettesPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+    <div className="max-w-4xl mx-auto flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
+      <div className="flex items-center justify-between mb-3 shrink-0">
         <h1 className="text-xl font-bold">Recettes</h1>
         <span className="text-sm text-muted">
           {filteredRecipes.length} recette{filteredRecipes.length !== 1 ? "s" : ""}
@@ -252,7 +252,7 @@ export default function RecettesPage() {
       </div>
 
       {/* AI suggestion */}
-      <div className="mb-4 bg-card border border-border rounded-xl p-4">
+      <div className="mb-3 bg-card border border-border rounded-xl p-4 shrink-0">
         <div className="flex gap-2">
           <input type="text" value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
@@ -267,17 +267,17 @@ export default function RecettesPage() {
       </div>
 
       {/* Search */}
-      <div className="mb-3">
+      <div className="mb-3 shrink-0">
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Rechercher une recette ou un ingrédient..."
           className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
       </div>
 
       {/* Category filter tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 scrollbar-hide shrink-0">
         <button
           onClick={() => setFilterCategory("")}
-          className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+          className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors shrink-0 ${
             !filterCategory
               ? "bg-primary text-white shadow-sm"
               : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
@@ -289,7 +289,7 @@ export default function RecettesPage() {
           <button
             key={c}
             onClick={() => setFilterCategory(filterCategory === c ? "" : c)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors shrink-0 ${
               filterCategory === c
                 ? "bg-primary text-white shadow-sm"
                 : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
@@ -300,6 +300,8 @@ export default function RecettesPage() {
         ))}
       </div>
 
+      {/* Scrollable content */}
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       {/* Add/Edit form */}
       {showAdd ? (
         <div className="mb-4 bg-card border border-border rounded-xl p-4 space-y-3">
@@ -602,6 +604,7 @@ export default function RecettesPage() {
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }

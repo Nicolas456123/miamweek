@@ -62,6 +62,51 @@ const quickLinks = [
   },
 ];
 
+const shortcuts = [
+  {
+    href: "/planning?view=today",
+    label: "Ce soir on mange quoi ?",
+    icon: "🌙",
+    primary: true,
+  },
+  {
+    href: "/planning",
+    label: "Planifier la semaine",
+    icon: "📅",
+    primary: false,
+  },
+  {
+    href: "/menu",
+    label: "Composer un menu",
+    icon: "🍽️",
+    primary: false,
+  },
+  {
+    href: "/liste",
+    label: "Nouvelle liste",
+    icon: "📝",
+    primary: false,
+  },
+  {
+    href: "/courses",
+    label: "Mes courses",
+    icon: "🛒",
+    primary: false,
+  },
+  {
+    href: "/recettes",
+    label: "Ajouter une recette",
+    icon: "📖",
+    primary: false,
+  },
+  {
+    href: "/suivi",
+    label: "Scanner un ticket",
+    icon: "📷",
+    primary: false,
+  },
+];
+
 export default function HomePage() {
   return (
     <div className="max-w-2xl mx-auto">
@@ -78,8 +123,28 @@ export default function HomePage() {
         </p>
       </div>
 
+      {/* Shortcuts */}
+      <div className="bg-card border border-border rounded-xl p-5 mb-6">
+        <h2 className="font-semibold mb-3">Raccourcis</h2>
+        <div className="flex flex-wrap gap-2">
+          {shortcuts.map((s) => (
+            <Link
+              key={s.href + s.label}
+              href={s.href}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                s.primary
+                  ? "bg-primary text-white hover:bg-primary-hover"
+                  : "bg-background border border-border text-foreground hover:bg-card-hover"
+              }`}
+            >
+              {s.icon} {s.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       {/* Quick links grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {quickLinks.map((link) => (
           <Link
             key={link.href}
@@ -101,31 +166,6 @@ export default function HomePage() {
             </div>
           </Link>
         ))}
-      </div>
-
-      {/* Quick add section */}
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="font-semibold mb-3">Raccourcis</h2>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/liste"
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
-          >
-            + Nouvelle liste
-          </Link>
-          <Link
-            href="/suivi"
-            className="px-4 py-2 bg-card border border-border rounded-lg text-sm font-medium text-foreground hover:bg-card-hover transition-colors"
-          >
-            Scanner un ticket
-          </Link>
-          <Link
-            href="/recettes"
-            className="px-4 py-2 bg-card border border-border rounded-lg text-sm font-medium text-foreground hover:bg-card-hover transition-colors"
-          >
-            Ajouter une recette
-          </Link>
-        </div>
       </div>
     </div>
   );

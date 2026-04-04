@@ -166,13 +166,13 @@ export default function ListePage() {
           </div>
 
           {/* Category tabs */}
-          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-hide">
             <button
               onClick={() => setActiveCategory(null)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
                 !activeCategory
-                  ? "bg-primary text-white"
-                  : "bg-card border border-border text-muted hover:text-foreground"
+                  ? "bg-primary text-white shadow-sm"
+                  : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
               }`}
             >
               Tout
@@ -181,13 +181,13 @@ export default function ListePage() {
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 ${
                   activeCategory === cat
-                    ? "bg-primary text-white"
-                    : "bg-card border border-border text-muted hover:text-foreground"
+                    ? "bg-primary text-white shadow-sm"
+                    : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
                 }`}
               >
-                <CategoryIcon category={cat} size={14} />
+                <CategoryIcon category={cat} size={20} />
                 {cat}
               </button>
             ))}
@@ -271,13 +271,25 @@ export default function ListePage() {
 
         {/* Right: Current list */}
         <div>
-          <div className="bg-card border border-border rounded-xl p-4 sticky top-20">
-            <h2 className="font-semibold mb-3 flex items-center gap-2">
-              Ma liste
-              <span className="text-xs bg-primary-light text-primary px-2 py-0.5 rounded-full">
-                {listItems.length}
-              </span>
-            </h2>
+          <div className={`rounded-xl p-4 sticky top-20 transition-colors ${
+            listItems.length > 0
+              ? "bg-card border-2 border-primary/30 shadow-md"
+              : "bg-card border border-border"
+          }`}>
+            <div className={`flex items-center justify-between mb-3 ${
+              listItems.length > 0 ? "pb-3 border-b border-border" : ""
+            }`}>
+              <h2 className="font-semibold flex items-center gap-2">
+                Ma liste
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                  listItems.length > 0
+                    ? "bg-primary text-white"
+                    : "bg-primary-light text-primary"
+                }`}>
+                  {listItems.length}
+                </span>
+              </h2>
+            </div>
 
             {listItems.length === 0 ? (
               <p className="text-sm text-muted text-center py-6">

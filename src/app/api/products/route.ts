@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const result = await query(
-      "SELECT * FROM products ORDER BY category ASC, name ASC"
+      "SELECT * FROM products ORDER BY category ASC, COALESCE(sort_order, 100) ASC, name ASC"
     );
 
     return Response.json(result.rows);

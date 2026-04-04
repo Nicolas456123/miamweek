@@ -289,6 +289,494 @@ async function migrate() {
   } else {
     console.log("Products already exist, skipping seed.");
   }
+
+  // Step 2: Add sort_order column and fix units
+  console.log("Updating sort_order and units...");
+
+  // Add sort_order column if not exists
+  try {
+    await client.execute("ALTER TABLE products ADD COLUMN sort_order INTEGER DEFAULT 100");
+  } catch { /* column already exists */ }
+
+  // Fix inconsistent units
+  const unitFixes = [
+    // Épices: pcs → pot
+    ["Herbes de Provence", "pot"], ["Curry", "pot"], ["Paprika", "pot"],
+    ["Cumin", "pot"], ["Cannelle", "pot"], ["Basilic sec", "pot"], ["Persil sec", "pot"],
+    // Levure
+    ["Levure", "sachet"],
+    // Condiments: pcs → flacon
+    ["Moutarde", "flacon"], ["Ketchup", "flacon"], ["Mayonnaise", "flacon"],
+    // Pots
+    ["Miel", "pot"], ["Confiture", "pot"],
+    // Bouteilles
+    ["Vin rouge", "bout."], ["Vin blanc", "bout."], ["Sirop", "bout."],
+    // Hygiène/Entretien: pcs → flacon
+    ["Savon", "flacon"], ["Gel douche", "flacon"], ["Shampoing", "flacon"],
+    ["Dentifrice", "tube"], ["Déodorant", "flacon"], ["Crème hydratante", "tube"],
+    ["Liquide vaisselle", "flacon"], ["Produit multi-surfaces", "flacon"],
+    ["Produit vitres", "flacon"], ["Désodorisant", "flacon"], ["Produit WC", "flacon"],
+    // Rouleaux
+    ["Film alimentaire", "roul."], ["Papier aluminium", "roul."],
+  ];
+  for (const [name, unit] of unitFixes) {
+    await client.execute({ sql: "UPDATE products SET default_unit = ? WHERE name = ?", args: [unit, name] });
+  }
+
+  // Set sort_order by popularity (lower = more common)
+  // Within each category, most frequently bought items first
+  const sortOrders: Record<string, string[]> = {
+    "Fruits & Légumes": ["Tomates", "Pommes de terre", "Oignons", "Carottes", "Bananes", "Pommes", "Salade", "Courgettes", "Poivrons", "Concombre", "Ail", "Champignons", "Citrons", "Haricots verts", "Épinards", "Brocoli", "Oranges", "Aubergines", "Avocat", "Poireaux", "Fraises", "Petits pois", "Chou", "Mangue", "Ananas"],
+    "Viandes & Poissons": ["Poulet (filets)", "Steak haché", "Lardons", "Jambon", "Saucisses", "Saumon", "Poulet (entier)", "Dinde", "Boeuf (bavette)", "Crevettes", "Merguez", "Porc (côtes)", "Cabillaud", "Thon (frais)", "Agneau"],
+    "Produits laitiers": ["Oeufs", "Lait", "Beurre", "Fromage râpé", "Crème fraîche", "Yaourts nature", "Mozzarella", "Crème liquide", "Parmesan", "Comté", "Camembert", "Fromage blanc", "Chèvre frais", "Mascarpone", "Ricotta"],
+    "Boulangerie": ["Baguette", "Pain de mie", "Pain complet", "Croissants", "Wraps/Tortillas", "Brioche", "Pain burger", "Biscottes"],
+    "Épicerie": ["Pâtes", "Riz", "Huile d'olive", "Sel", "Sucre", "Farine", "Sauce tomate", "Moutarde", "Poivre", "Conserves de thon", "Concentré de tomates", "Vinaigre", "Café", "Chocolat", "Ketchup", "Mayonnaise", "Lentilles", "Pois chiches", "Huile tournesol", "Conserves de maïs", "Olives", "Miel", "Thé", "Confiture", "Semoule"],
+    "Surgelés": ["Frites", "Pizza surgelée", "Légumes surgelés", "Nuggets", "Poisson pané", "Glaces", "Épinards surgelés", "Fruits surgelés"],
+    "Boissons": ["Eau plate", "Lait d'amande", "Jus d'orange", "Eau gazeuse", "Café moulu", "Coca-Cola", "Bière", "Vin rouge", "Vin blanc", "Sirop"],
+    "Hygiène & Beauté": ["Papier toilette", "Gel douche", "Shampoing", "Dentifrice", "Mouchoirs", "Savon", "Déodorant", "Brosse à dents", "Cotons", "Rasoirs", "Crème hydratante", "Serviettes hygiéniques", "Lessive (capsules)", "Lingettes bébé", "Couches"],
+    "Entretien & Maison": ["Sopalin", "Éponges", "Liquide vaisselle", "Sacs poubelle", "Lessive", "Pastilles lave-vaisselle", "Produit multi-surfaces", "Javel", "Film alimentaire", "Papier aluminium", "Adoucissant", "Produit vitres", "Produit WC", "Désodorisant", "Balai/serpillère (recharge)"],
+    "Épices & Condiments": ["Herbes de Provence", "Bouillon cube", "Sauce soja", "Curry", "Paprika", "Basilic sec", "Persil sec", "Cumin", "Cannelle", "Levure"],
+  };
+
+  for (const [category, names] of Object.entries(sortOrders)) {
+    for (let i = 0; i < names.length; i++) {
+      await client.execute({ sql: "UPDATE products SET sort_order = ? WHERE name = ? AND category = ?", args: [i + 1, names[i], category] });
+    }
+  }
+  console.log("Sort order and units updated!");
+
+  // Step 3: Seed classic recipes
+  const recipeCount = await client.execute("SELECT COUNT(*) as count FROM recipes");
+  if (Number(recipeCount.rows[0].count) === 0) {
+    console.log("Seeding classic recipes...");
+
+    const recipes: { name: string; description: string; servings: number; category: string; ingredients: [string, number, string, string][] }[] = [
+      {
+        name: "Pâtes carbonara",
+        description: "Pâtes crémeuses aux lardons et parmesan",
+        servings: 2, category: "Italien",
+        ingredients: [
+          ["Pâtes", 200, "g", "Épicerie"],
+          ["Lardons", 150, "g", "Viandes & Poissons"],
+          ["Oeufs", 2, "pcs", "Produits laitiers"],
+          ["Parmesan", 50, "g", "Produits laitiers"],
+          ["Crème fraîche", 50, "mL", "Produits laitiers"],
+          ["Poivre", 2, "g", "Épicerie"],
+        ],
+      },
+      {
+        name: "Pâtes bolognaise",
+        description: "Pâtes sauce tomate à la viande hachée",
+        servings: 2, category: "Italien",
+        ingredients: [
+          ["Pâtes", 200, "g", "Épicerie"],
+          ["Steak haché", 2, "pcs", "Viandes & Poissons"],
+          ["Sauce tomate", 1, "boîte", "Épicerie"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+          ["Ail", 1, "pcs", "Fruits & Légumes"],
+          ["Huile d'olive", 15, "mL", "Épicerie"],
+          ["Fromage râpé", 40, "g", "Produits laitiers"],
+        ],
+      },
+      {
+        name: "Croque-monsieur",
+        description: "Sandwich grillé jambon-fromage fondant",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Pain de mie", 4, "pcs", "Boulangerie"],
+          ["Jambon", 2, "pcs", "Viandes & Poissons"],
+          ["Fromage râpé", 80, "g", "Produits laitiers"],
+          ["Beurre", 20, "g", "Produits laitiers"],
+          ["Lait", 50, "mL", "Produits laitiers"],
+        ],
+      },
+      {
+        name: "Omelette aux champignons",
+        description: "Omelette garnie de champignons poêlés",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Oeufs", 4, "pcs", "Produits laitiers"],
+          ["Champignons", 150, "g", "Fruits & Légumes"],
+          ["Beurre", 15, "g", "Produits laitiers"],
+          ["Sel", 2, "g", "Épicerie"],
+          ["Poivre", 1, "g", "Épicerie"],
+          ["Persil sec", 1, "pcs", "Épices & Condiments"],
+        ],
+      },
+      {
+        name: "Poulet rôti",
+        description: "Poulet entier rôti aux herbes et pommes de terre",
+        servings: 4, category: "Français",
+        ingredients: [
+          ["Poulet (entier)", 1, "pcs", "Viandes & Poissons"],
+          ["Pommes de terre", 500, "g", "Fruits & Légumes"],
+          ["Herbes de Provence", 1, "pot", "Épices & Condiments"],
+          ["Beurre", 30, "g", "Produits laitiers"],
+          ["Ail", 3, "pcs", "Fruits & Légumes"],
+          ["Huile d'olive", 30, "mL", "Épicerie"],
+        ],
+      },
+      {
+        name: "Gratin dauphinois",
+        description: "Gratin crémeux de pommes de terre au four",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Pommes de terre", 400, "g", "Fruits & Légumes"],
+          ["Crème liquide", 200, "mL", "Produits laitiers"],
+          ["Lait", 100, "mL", "Produits laitiers"],
+          ["Ail", 1, "pcs", "Fruits & Légumes"],
+          ["Beurre", 15, "g", "Produits laitiers"],
+          ["Fromage râpé", 50, "g", "Produits laitiers"],
+        ],
+      },
+      {
+        name: "Quiche lorraine",
+        description: "Tarte salée aux lardons et crème",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Oeufs", 3, "pcs", "Produits laitiers"],
+          ["Lardons", 150, "g", "Viandes & Poissons"],
+          ["Crème liquide", 200, "mL", "Produits laitiers"],
+          ["Fromage râpé", 60, "g", "Produits laitiers"],
+          ["Farine", 200, "g", "Épicerie"],
+          ["Beurre", 100, "g", "Produits laitiers"],
+        ],
+      },
+      {
+        name: "Salade César",
+        description: "Salade croquante poulet, croûtons et parmesan",
+        servings: 2, category: "International",
+        ingredients: [
+          ["Salade", 1, "pcs", "Fruits & Légumes"],
+          ["Poulet (filets)", 200, "g", "Viandes & Poissons"],
+          ["Parmesan", 30, "g", "Produits laitiers"],
+          ["Pain de mie", 2, "pcs", "Boulangerie"],
+          ["Huile d'olive", 20, "mL", "Épicerie"],
+          ["Moutarde", 1, "c.à.c", "Épicerie"],
+        ],
+      },
+      {
+        name: "Curry de poulet",
+        description: "Poulet mijoté au curry et lait de coco",
+        servings: 2, category: "Asiatique",
+        ingredients: [
+          ["Poulet (filets)", 250, "g", "Viandes & Poissons"],
+          ["Curry", 1, "pot", "Épices & Condiments"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+          ["Riz", 150, "g", "Épicerie"],
+          ["Crème liquide", 200, "mL", "Produits laitiers"],
+          ["Tomates", 2, "pcs", "Fruits & Légumes"],
+        ],
+      },
+      {
+        name: "Risotto aux champignons",
+        description: "Riz crémeux aux champignons et parmesan",
+        servings: 2, category: "Italien",
+        ingredients: [
+          ["Riz", 200, "g", "Épicerie"],
+          ["Champignons", 200, "g", "Fruits & Légumes"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+          ["Parmesan", 50, "g", "Produits laitiers"],
+          ["Beurre", 20, "g", "Produits laitiers"],
+          ["Bouillon cube", 1, "pcs", "Épices & Condiments"],
+          ["Vin blanc", 50, "mL", "Boissons"],
+        ],
+      },
+      {
+        name: "Burger maison",
+        description: "Burger boeuf avec crudités et sauce",
+        servings: 2, category: "International",
+        ingredients: [
+          ["Steak haché", 2, "pcs", "Viandes & Poissons"],
+          ["Pain burger", 2, "pcs", "Boulangerie"],
+          ["Salade", 1, "pcs", "Fruits & Légumes"],
+          ["Tomates", 1, "pcs", "Fruits & Légumes"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+          ["Fromage râpé", 40, "g", "Produits laitiers"],
+          ["Ketchup", 1, "flacon", "Épicerie"],
+        ],
+      },
+      {
+        name: "Tacos poulet",
+        description: "Wraps garnis de poulet épicé et crudités",
+        servings: 2, category: "International",
+        ingredients: [
+          ["Wraps/Tortillas", 4, "pcs", "Boulangerie"],
+          ["Poulet (filets)", 200, "g", "Viandes & Poissons"],
+          ["Tomates", 2, "pcs", "Fruits & Légumes"],
+          ["Salade", 1, "pcs", "Fruits & Légumes"],
+          ["Fromage râpé", 50, "g", "Produits laitiers"],
+          ["Crème fraîche", 50, "mL", "Produits laitiers"],
+          ["Paprika", 1, "pot", "Épices & Condiments"],
+        ],
+      },
+      {
+        name: "Soupe de légumes",
+        description: "Soupe maison aux légumes de saison",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Carottes", 2, "pcs", "Fruits & Légumes"],
+          ["Pommes de terre", 200, "g", "Fruits & Légumes"],
+          ["Poireaux", 1, "pcs", "Fruits & Légumes"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+          ["Bouillon cube", 1, "pcs", "Épices & Condiments"],
+          ["Beurre", 15, "g", "Produits laitiers"],
+        ],
+      },
+      {
+        name: "Ratatouille",
+        description: "Mélange de légumes du soleil mijotés",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Courgettes", 2, "pcs", "Fruits & Légumes"],
+          ["Aubergines", 1, "pcs", "Fruits & Légumes"],
+          ["Poivrons", 2, "pcs", "Fruits & Légumes"],
+          ["Tomates", 3, "pcs", "Fruits & Légumes"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+          ["Ail", 2, "pcs", "Fruits & Légumes"],
+          ["Herbes de Provence", 1, "pot", "Épices & Condiments"],
+          ["Huile d'olive", 30, "mL", "Épicerie"],
+        ],
+      },
+      {
+        name: "Blanquette de veau",
+        description: "Ragoût de veau crémeux aux légumes",
+        servings: 4, category: "Français",
+        ingredients: [
+          ["Boeuf (bavette)", 500, "g", "Viandes & Poissons"],
+          ["Carottes", 3, "pcs", "Fruits & Légumes"],
+          ["Champignons", 200, "g", "Fruits & Légumes"],
+          ["Oignons", 2, "pcs", "Fruits & Légumes"],
+          ["Crème fraîche", 150, "mL", "Produits laitiers"],
+          ["Bouillon cube", 2, "pcs", "Épices & Condiments"],
+          ["Beurre", 30, "g", "Produits laitiers"],
+          ["Farine", 30, "g", "Épicerie"],
+        ],
+      },
+      {
+        name: "Crêpes",
+        description: "Crêpes fines sucrées à garnir",
+        servings: 2, category: "Dessert",
+        ingredients: [
+          ["Farine", 125, "g", "Épicerie"],
+          ["Oeufs", 2, "pcs", "Produits laitiers"],
+          ["Lait", 250, "mL", "Produits laitiers"],
+          ["Sucre", 30, "g", "Épicerie"],
+          ["Beurre", 20, "g", "Produits laitiers"],
+        ],
+      },
+      {
+        name: "Gâteau au chocolat",
+        description: "Moelleux au chocolat fondant",
+        servings: 6, category: "Dessert",
+        ingredients: [
+          ["Chocolat", 200, "g", "Épicerie"],
+          ["Beurre", 100, "g", "Produits laitiers"],
+          ["Oeufs", 3, "pcs", "Produits laitiers"],
+          ["Sucre", 100, "g", "Épicerie"],
+          ["Farine", 50, "g", "Épicerie"],
+        ],
+      },
+      {
+        name: "Tarte aux pommes",
+        description: "Tarte classique aux pommes caramélisées",
+        servings: 6, category: "Dessert",
+        ingredients: [
+          ["Pommes", 4, "pcs", "Fruits & Légumes"],
+          ["Farine", 200, "g", "Épicerie"],
+          ["Beurre", 100, "g", "Produits laitiers"],
+          ["Sucre", 80, "g", "Épicerie"],
+          ["Oeufs", 1, "pcs", "Produits laitiers"],
+          ["Cannelle", 1, "pot", "Épices & Condiments"],
+        ],
+      },
+      {
+        name: "Pizza maison",
+        description: "Pizza maison avec garniture au choix",
+        servings: 2, category: "Italien",
+        ingredients: [
+          ["Farine", 250, "g", "Épicerie"],
+          ["Levure", 1, "sachet", "Épices & Condiments"],
+          ["Sauce tomate", 1, "boîte", "Épicerie"],
+          ["Mozzarella", 125, "g", "Produits laitiers"],
+          ["Jambon", 2, "pcs", "Viandes & Poissons"],
+          ["Champignons", 100, "g", "Fruits & Légumes"],
+          ["Huile d'olive", 15, "mL", "Épicerie"],
+        ],
+      },
+      {
+        name: "Lasagnes",
+        description: "Lasagnes bolognaise gratinées au four",
+        servings: 4, category: "Italien",
+        ingredients: [
+          ["Pâtes", 250, "g", "Épicerie"],
+          ["Steak haché", 4, "pcs", "Viandes & Poissons"],
+          ["Sauce tomate", 2, "boîte", "Épicerie"],
+          ["Fromage râpé", 150, "g", "Produits laitiers"],
+          ["Lait", 500, "mL", "Produits laitiers"],
+          ["Beurre", 40, "g", "Produits laitiers"],
+          ["Farine", 40, "g", "Épicerie"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+        ],
+      },
+      {
+        name: "Couscous",
+        description: "Couscous aux légumes et viande",
+        servings: 4, category: "International",
+        ingredients: [
+          ["Semoule", 300, "g", "Épicerie"],
+          ["Poulet (filets)", 400, "g", "Viandes & Poissons"],
+          ["Carottes", 3, "pcs", "Fruits & Légumes"],
+          ["Courgettes", 2, "pcs", "Fruits & Légumes"],
+          ["Pois chiches", 1, "boîte", "Épicerie"],
+          ["Tomates", 2, "pcs", "Fruits & Légumes"],
+          ["Oignons", 2, "pcs", "Fruits & Légumes"],
+          ["Bouillon cube", 2, "pcs", "Épices & Condiments"],
+        ],
+      },
+      {
+        name: "Chili con carne",
+        description: "Haché épicé aux haricots rouges et tomates",
+        servings: 2, category: "International",
+        ingredients: [
+          ["Steak haché", 2, "pcs", "Viandes & Poissons"],
+          ["Sauce tomate", 1, "boîte", "Épicerie"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+          ["Poivrons", 1, "pcs", "Fruits & Légumes"],
+          ["Riz", 150, "g", "Épicerie"],
+          ["Cumin", 1, "pot", "Épices & Condiments"],
+          ["Concentré de tomates", 1, "boîte", "Épicerie"],
+        ],
+      },
+      {
+        name: "Saumon grillé légumes",
+        description: "Pavé de saumon avec légumes grillés",
+        servings: 2, category: "International",
+        ingredients: [
+          ["Saumon", 250, "g", "Viandes & Poissons"],
+          ["Courgettes", 1, "pcs", "Fruits & Légumes"],
+          ["Poivrons", 1, "pcs", "Fruits & Légumes"],
+          ["Huile d'olive", 20, "mL", "Épicerie"],
+          ["Citrons", 1, "pcs", "Fruits & Légumes"],
+          ["Herbes de Provence", 1, "pot", "Épices & Condiments"],
+        ],
+      },
+      {
+        name: "Pad thaï",
+        description: "Nouilles sautées aux crevettes et cacahuètes",
+        servings: 2, category: "Asiatique",
+        ingredients: [
+          ["Pâtes", 200, "g", "Épicerie"],
+          ["Crevettes", 150, "g", "Viandes & Poissons"],
+          ["Oeufs", 2, "pcs", "Produits laitiers"],
+          ["Sauce soja", 30, "mL", "Épices & Condiments"],
+          ["Citrons", 1, "pcs", "Fruits & Légumes"],
+          ["Oignons", 1, "pcs", "Fruits & Légumes"],
+        ],
+      },
+      {
+        name: "Wok de légumes",
+        description: "Légumes croquants sautés au wok",
+        servings: 2, category: "Asiatique",
+        ingredients: [
+          ["Poivrons", 2, "pcs", "Fruits & Légumes"],
+          ["Courgettes", 1, "pcs", "Fruits & Légumes"],
+          ["Carottes", 2, "pcs", "Fruits & Légumes"],
+          ["Champignons", 100, "g", "Fruits & Légumes"],
+          ["Sauce soja", 30, "mL", "Épices & Condiments"],
+          ["Riz", 150, "g", "Épicerie"],
+          ["Huile tournesol", 15, "mL", "Épicerie"],
+        ],
+      },
+      {
+        name: "Steak frites",
+        description: "Steak grillé accompagné de frites maison",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Boeuf (bavette)", 300, "g", "Viandes & Poissons"],
+          ["Pommes de terre", 400, "g", "Fruits & Légumes"],
+          ["Huile tournesol", 50, "mL", "Épicerie"],
+          ["Beurre", 20, "g", "Produits laitiers"],
+          ["Sel", 2, "g", "Épicerie"],
+          ["Poivre", 1, "g", "Épicerie"],
+        ],
+      },
+      {
+        name: "Poulet tikka masala",
+        description: "Poulet mariné dans une sauce tomate épicée",
+        servings: 4, category: "Asiatique",
+        ingredients: [
+          ["Poulet (filets)", 400, "g", "Viandes & Poissons"],
+          ["Sauce tomate", 1, "boîte", "Épicerie"],
+          ["Crème liquide", 200, "mL", "Produits laitiers"],
+          ["Oignons", 2, "pcs", "Fruits & Légumes"],
+          ["Curry", 1, "pot", "Épices & Condiments"],
+          ["Riz", 200, "g", "Épicerie"],
+          ["Ail", 2, "pcs", "Fruits & Légumes"],
+          ["Paprika", 1, "pot", "Épices & Condiments"],
+        ],
+      },
+      {
+        name: "Salade niçoise",
+        description: "Salade composée aux tomates, thon et olives",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Salade", 1, "pcs", "Fruits & Légumes"],
+          ["Tomates", 2, "pcs", "Fruits & Légumes"],
+          ["Oeufs", 2, "pcs", "Produits laitiers"],
+          ["Conserves de thon", 1, "boîte", "Épicerie"],
+          ["Olives", 50, "g", "Épicerie"],
+          ["Haricots verts", 100, "g", "Fruits & Légumes"],
+          ["Huile d'olive", 20, "mL", "Épicerie"],
+        ],
+      },
+      {
+        name: "Taboulé",
+        description: "Salade fraîche de semoule aux herbes et légumes",
+        servings: 2, category: "International",
+        ingredients: [
+          ["Semoule", 150, "g", "Épicerie"],
+          ["Tomates", 2, "pcs", "Fruits & Légumes"],
+          ["Concombre", 1, "pcs", "Fruits & Légumes"],
+          ["Citrons", 2, "pcs", "Fruits & Légumes"],
+          ["Huile d'olive", 30, "mL", "Épicerie"],
+          ["Persil sec", 1, "pot", "Épices & Condiments"],
+        ],
+      },
+      {
+        name: "Croque madame",
+        description: "Croque-monsieur avec oeuf sur le plat",
+        servings: 2, category: "Français",
+        ingredients: [
+          ["Pain de mie", 4, "pcs", "Boulangerie"],
+          ["Jambon", 2, "pcs", "Viandes & Poissons"],
+          ["Fromage râpé", 80, "g", "Produits laitiers"],
+          ["Oeufs", 2, "pcs", "Produits laitiers"],
+          ["Beurre", 20, "g", "Produits laitiers"],
+          ["Lait", 50, "mL", "Produits laitiers"],
+        ],
+      },
+    ];
+
+    for (const recipe of recipes) {
+      const result = await client.execute({
+        sql: "INSERT INTO recipes (name, description, servings, category) VALUES (?, ?, ?, ?)",
+        args: [recipe.name, recipe.description, recipe.servings, recipe.category],
+      });
+      const recipeId = Number(result.lastInsertRowid);
+
+      for (const [ingName, qty, unit, cat] of recipe.ingredients) {
+        await client.execute({
+          sql: "INSERT INTO recipe_ingredients (recipe_id, name, quantity, unit, category) VALUES (?, ?, ?, ?, ?)",
+          args: [recipeId, ingName, qty, unit, cat],
+        });
+      }
+    }
+
+    console.log(`${recipes.length} recipes seeded with ingredients!`);
+  } else {
+    console.log("Recipes already exist, skipping seed.");
+  }
 }
 
 migrate().catch(console.error);

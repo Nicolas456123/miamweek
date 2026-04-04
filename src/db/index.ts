@@ -2,22 +2,24 @@ import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
 import * as schema from "./schema";
 
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+function createDb() {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
 
-function getDb() {
-  if (!_db) {
-    const client = createClient({
-      url: process.env.TURSO_DATABASE_URL!,
-      authToken: process.env.TURSO_AUTH_TOKEN!,
-    });
-    _db = drizzle(client, { schema });
+  if (!url || !authToken) {
+    throw new Error(
+      `Missing database credentials: url=${url ? "set" : "missing"}, token=${authToken ? "set" : "missing"}`
+    );
   }
-  return _db;
+
+  const client = createClient({ url, authToken });
+  return drizzle(client, { schema });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const db = new Proxy({} as any, {
   get(_target, prop) {
-    return (getDb() as any)[prop];
+    const instance = createDb();
+    return (instance as any)[prop];
   },
 }) as ReturnType<typeof drizzle<typeof schema>>;

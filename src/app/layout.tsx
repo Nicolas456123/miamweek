@@ -15,7 +15,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "MiamWeek",
-  description: "Planificateur de repas, liste de courses et gestion maison",
+  description:
+    "Planificateur de courses intelligent - liste, recettes, suivi des prix et consommation",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -28,7 +32,7 @@ export default function RootLayout({
       lang="fr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-background">
         <Nav />
         <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
           {children}

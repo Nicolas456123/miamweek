@@ -1,60 +1,38 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { CATEGORIES, getMonday } from "@/lib/utils";
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 
-type ShoppingItem = {
+type ListItem = {
   id: number;
-  name: string;
+  productId: number | null;
+  productName: string;
   quantity: number | null;
   unit: string | null;
   category: string | null;
   checked: boolean;
   source: string;
+  listStatus: string;
 };
 
 export default function CoursesPage() {
-  const [weekStart, setWeekStart] = useState(getMonday());
-  const [items, setItems] = useState<ShoppingItem[]>([]);
-  const [newItem, setNewItem] = useState("");
-  const [newCategory, setNewCategory] = useState("Autre");
-  const [newQuantity, setNewQuantity] = useState("");
-  const [newUnit, setNewUnit] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
+  const [items, setItems] = useState<ListItem[]>([]);
+  const [quickAdd, setQuickAdd] = useState("");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
-  const fetchItems = useCallback(() => {
-    fetch(`/api/shopping?weekStart=${weekStart}`)
+  const fetchItems = () => {
+    fetch("/api/list?status=active")
       .then((r) => r.json())
       .then((data) => setItems(Array.isArray(data) ? data : []))
       .catch(console.error);
-  }, [weekStart]);
+  };
 
   useEffect(() => {
     fetchItems();
-  }, [fetchItems]);
-
-  const addItem = async () => {
-    if (!newItem.trim()) return;
-    await fetch("/api/shopping", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        weekStart,
-        name: newItem,
-        quantity: newQuantity ? Number(newQuantity) : null,
-        unit: newUnit || null,
-        category: newCategory,
-      }),
-    });
-    setNewItem("");
-    setNewQuantity("");
-    setNewUnit("");
-    fetchItems();
-  };
+  }, []);
 
   const toggleItem = async (id: number, checked: boolean) => {
-    await fetch("/api/shopping", {
+    await fetch("/api/list", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, checked: !checked }),
@@ -62,176 +40,143 @@ export default function CoursesPage() {
     fetchItems();
   };
 
-  const removeItem = async (id: number) => {
-    await fetch("/api/shopping", {
-      method: "DELETE",
+  const addQuickItem = async () => {
+    if (!quickAdd.trim()) return;
+    await fetch("/api/list", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({
+        productName: quickAdd,
+        quantity: 1,
+        unit: "pcs",
+        category: "Autre",
+        source: "manual",
+        listStatus: "active",
+      }),
     });
+    setQuickAdd("");
+    setShowQuickAdd(false);
     fetchItems();
   };
 
-  const generateFromPlan = async () => {
-    setGenerating(true);
-    try {
-      await fetch("/api/shopping/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekStart }),
-      });
-      fetchItems();
-    } catch (err) {
-      console.error(err);
-    }
-    setGenerating(false);
+  const finishShopping = async () => {
+    await fetch("/api/list/finish", { method: "POST" });
+    fetchItems();
   };
 
-  const changeWeek = (delta: number) => {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + 7 * delta);
-    setWeekStart(getMonday(d));
-  };
-
-  // Group items by category
-  const grouped = items.reduce(
-    (acc, item) => {
+  const grouped = useMemo(() => {
+    const groups: Record<string, ListItem[]> = {};
+    for (const item of items) {
       const cat = item.category || "Autre";
-      if (!acc[cat]) acc[cat] = [];
-      acc[cat].push(item);
-      return acc;
-    },
-    {} as Record<string, ShoppingItem[]>
-  );
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(item);
+    }
+    // Sort: unchecked first within each category
+    for (const cat of Object.keys(groups)) {
+      groups[cat].sort((a, b) => Number(a.checked) - Number(b.checked));
+    }
+    return groups;
+  }, [items]);
 
   const checkedCount = items.filter((i) => i.checked).length;
   const totalCount = items.length;
+  const progress = totalCount > 0 ? (checkedCount / totalCount) * 100 : 0;
 
-  const formatWeekRange = () => {
-    const start = new Date(weekStart);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    const fmt = (d: Date) =>
-      d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-    return `${fmt(start)} - ${fmt(end)}`;
-  };
+  if (totalCount === 0) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16">
+        <div className="text-6xl mb-4">🛒</div>
+        <h1 className="text-xl font-bold mb-2">Pas de liste active</h1>
+        <p className="text-muted mb-6">
+          Prépare ta liste de courses avant de partir en magasin
+        </p>
+        <Link
+          href="/liste"
+          className="px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary-hover transition-colors"
+        >
+          Préparer ma liste
+        </Link>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => changeWeek(-1)}
-            className="px-3 py-1.5 bg-card border border-border rounded-lg hover:bg-card-hover text-sm"
-          >
-            &larr;
-          </button>
-          <h1 className="text-lg font-semibold">{formatWeekRange()}</h1>
-          <button
-            onClick={() => changeWeek(1)}
-            className="px-3 py-1.5 bg-card border border-border rounded-lg hover:bg-card-hover text-sm"
-          >
-            &rarr;
-          </button>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={generateFromPlan}
-            disabled={generating}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover text-sm font-medium disabled:opacity-50"
-          >
-            {generating ? "Génération..." : "Générer depuis le planning"}
-          </button>
-        </div>
+    <div className="max-w-xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">Mode courses</h1>
+        <button
+          onClick={finishShopping}
+          className="px-4 py-2 bg-success text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
+        >
+          Terminer
+        </button>
       </div>
 
       {/* Progress */}
-      {totalCount > 0 && (
-        <div className="mb-4 bg-card border border-border rounded-xl p-3">
-          <div className="flex justify-between text-sm mb-2">
-            <span>
-              {checkedCount}/{totalCount} articles
-            </span>
-            <span className="text-muted">
-              {Math.round((checkedCount / totalCount) * 100)}%
-            </span>
-          </div>
-          <div className="w-full bg-border rounded-full h-2">
-            <div
-              className="bg-primary h-2 rounded-full"
-              style={{
-                width: `${(checkedCount / totalCount) * 100}%`,
-              }}
-            />
-          </div>
+      <div className="bg-card border border-border rounded-xl p-4 mb-4">
+        <div className="flex justify-between text-sm mb-2">
+          <span className="font-medium">
+            {checkedCount}/{totalCount} articles
+          </span>
+          <span className="text-muted">{Math.round(progress)}%</span>
         </div>
-      )}
-
-      {/* Add item */}
-      <div className="mb-4">
-        {showAdd ? (
-          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newItem}
-                onChange={(e) => setNewItem(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addItem()}
-                placeholder="Nom de l'article"
-                className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm"
-                autoFocus
-              />
-              <input
-                type="number"
-                value={newQuantity}
-                onChange={(e) => setNewQuantity(e.target.value)}
-                placeholder="Qté"
-                className="w-20 bg-background border border-border rounded-lg px-3 py-2 text-sm"
-              />
-              <input
-                type="text"
-                value={newUnit}
-                onChange={(e) => setNewUnit(e.target.value)}
-                placeholder="Unité"
-                className="w-20 bg-background border border-border rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                className="bg-background border border-border rounded-lg px-3 py-2 text-sm"
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={addItem}
-                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium"
-              >
-                Ajouter
-              </button>
-              <button
-                onClick={() => setShowAdd(false)}
-                className="px-4 py-2 text-muted text-sm"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="w-full py-3 border border-dashed border-border rounded-xl text-muted hover:border-primary hover:text-primary text-sm"
-          >
-            + Ajouter un article
-          </button>
+        <div className="w-full bg-border rounded-full h-3 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${progress}%`,
+              backgroundColor:
+                progress === 100
+                  ? "var(--color-success)"
+                  : "var(--color-primary)",
+            }}
+          />
+        </div>
+        {progress === 100 && (
+          <p className="text-sm text-success font-medium mt-2 text-center">
+            Tout est pris ! Bon appétit !
+          </p>
         )}
       </div>
 
-      {/* Shopping list grouped by category */}
+      {/* Quick add */}
+      {showQuickAdd ? (
+        <div className="bg-card border border-border rounded-xl p-3 mb-4 flex gap-2">
+          <input
+            type="text"
+            value={quickAdd}
+            onChange={(e) => setQuickAdd(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addQuickItem()}
+            placeholder="Ajouter un article..."
+            className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            autoFocus
+          />
+          <button
+            onClick={addQuickItem}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium"
+          >
+            +
+          </button>
+          <button
+            onClick={() => setShowQuickAdd(false)}
+            className="px-2 text-muted"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowQuickAdd(true)}
+          className="w-full mb-4 py-2.5 border border-dashed border-border rounded-xl text-muted hover:border-primary hover:text-primary text-sm transition-colors"
+        >
+          + Ajouter en direct
+        </button>
+      )}
+
+      {/* Shopping list */}
       <div className="space-y-3">
         {Object.entries(grouped)
           .sort(([a], [b]) => a.localeCompare(b))
@@ -241,66 +186,54 @@ export default function CoursesPage() {
               className="bg-card border border-border rounded-xl overflow-hidden"
             >
               <div className="px-4 py-2 bg-card-hover border-b border-border">
-                <h3 className="text-sm font-semibold">{category}</h3>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {category}
+                  <span className="text-muted font-normal ml-2">
+                    {categoryItems.filter((i) => i.checked).length}/
+                    {categoryItems.length}
+                  </span>
+                </h3>
               </div>
               <div className="divide-y divide-border">
                 {categoryItems.map((item) => (
-                  <div
+                  <button
                     key={item.id}
-                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-card-hover"
+                    onClick={() => toggleItem(item.id, item.checked)}
+                    className="flex items-center gap-3 px-4 py-3 w-full text-left hover:bg-card-hover transition-colors"
                   >
-                    <button
-                      onClick={() => toggleItem(item.id, item.checked)}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs ${
+                    <div
+                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs transition-colors ${
                         item.checked
                           ? "bg-success border-success text-white"
                           : "border-border hover:border-primary"
                       }`}
                     >
-                      {item.checked && "✓"}
-                    </button>
+                      {item.checked && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      )}
+                    </div>
                     <span
                       className={`flex-1 text-sm ${
                         item.checked
-                          ? "line-through opacity-50"
-                          : ""
+                          ? "line-through text-muted"
+                          : "text-foreground"
                       }`}
                     >
-                      {item.name}
+                      {item.productName}
                     </span>
                     {item.quantity && (
                       <span className="text-xs text-muted">
-                        {item.quantity}
-                        {item.unit ? ` ${item.unit}` : ""}
+                        {item.quantity} {item.unit}
                       </span>
                     )}
-                    {item.source === "auto" && (
-                      <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                        auto
-                      </span>
-                    )}
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="text-muted hover:text-danger text-sm"
-                    >
-                      x
-                    </button>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
           ))}
       </div>
-
-      {totalCount === 0 && (
-        <div className="text-center py-12 text-muted">
-          <p className="text-4xl mb-3">🛒</p>
-          <p>Aucun article pour cette semaine</p>
-          <p className="text-sm mt-1">
-            Ajoutez des articles ou générez la liste depuis le planning
-          </p>
-        </div>
-      )}
     </div>
   );
 }

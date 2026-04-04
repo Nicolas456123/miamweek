@@ -22,6 +22,7 @@ type PantryItem = {
   location: string | null;
   added_at: string | null;
   expires_at: string | null;
+  expiry_date: string | null;
   icon: string | null;
   defaultUnit: string | null;
 };
@@ -41,6 +42,12 @@ export default function InventairePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("placard");
+  const [showSmartAdd, setShowSmartAdd] = useState(false);
+  const [smartMode, setSmartMode] = useState<"photo" | "text" | "voice">("text");
+  const [smartText, setSmartText] = useState("");
+  const [smartImage, setSmartImage] = useState<string | null>(null);
+  const [smartLoading, setSmartLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
     fetchPantry();
@@ -101,6 +108,72 @@ export default function InventairePage() {
     fetchPantry();
   };
 
+  const handleSmartScan = async () => {
+    if (!smartText.trim() && !smartImage) return;
+    setSmartLoading(true);
+    try {
+      const res = await fetch("/api/inventory-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: smartImage || undefined,
+          text: smartImage ? undefined : smartText,
+        }),
+      });
+      const data = await res.json();
+      if (data.items) {
+        setSmartText("");
+        setSmartImage(null);
+        setShowSmartAdd(false);
+        fetchPantry();
+        alert(`${data.count} produit(s) ajouté(s) à l'inventaire !`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setSmartLoading(false);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setSmartImage(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const startListening = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const W = window as any;
+    const SpeechRecognitionCtor = W.webkitSpeechRecognition || W.SpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      alert("La reconnaissance vocale n'est pas supportée par ce navigateur.");
+      return;
+    }
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "fr-FR";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setSmartText(transcript);
+    };
+    recognition.onerror = () => setIsListening(false);
+
+    if (isListening) {
+      recognition.stop();
+    } else {
+      recognition.start();
+    }
+  };
+
   const filteredItems = useMemo(() => {
     if (!search) return items;
     const s = search.toLowerCase();
@@ -152,13 +225,119 @@ export default function InventairePage() {
             {items.length} produit{items.length !== 1 ? "s" : ""} chez moi
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
-        >
-          {showAdd ? "Fermer" : "+ Ajouter"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setShowSmartAdd(!showSmartAdd); setShowAdd(false); }}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              showSmartAdd ? "bg-purple-100 text-purple-700" : "bg-purple-600 text-white hover:bg-purple-700"
+            }`}
+          >
+            {showSmartAdd ? "Fermer" : "Scan IA"}
+          </button>
+          <button
+            onClick={() => { setShowAdd(!showAdd); setShowSmartAdd(false); }}
+            className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
+          >
+            {showAdd ? "Fermer" : "+ Manuel"}
+          </button>
+        </div>
       </div>
+
+      {/* Smart add panel (photo / text / voice) */}
+      {showSmartAdd && (
+        <div className="mb-4 bg-card border-2 border-purple-200 rounded-xl p-4">
+          {/* Mode toggle */}
+          <div className="flex gap-1 bg-background border border-border rounded-lg p-0.5 mb-4 w-fit">
+            {([
+              { key: "photo" as const, label: "Photo", icon: "📸" },
+              { key: "text" as const, label: "Texte", icon: "📝" },
+              { key: "voice" as const, label: "Voix", icon: "🎤" },
+            ]).map((m) => (
+              <button
+                key={m.key}
+                onClick={() => setSmartMode(m.key)}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  smartMode === m.key
+                    ? "bg-purple-600 text-white"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                {m.icon} {m.label}
+              </button>
+            ))}
+          </div>
+
+          {smartMode === "photo" && (
+            <div>
+              <p className="text-sm text-muted mb-3">
+                Prends en photo ton frigo, placard ou tes courses. L&apos;IA identifie les produits.
+              </p>
+              {smartImage ? (
+                <div className="mb-3 relative inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={smartImage} alt="Scan" className="max-h-48 rounded-lg border border-border" />
+                  <button onClick={() => setSmartImage(null)}
+                    className="absolute top-2 right-2 w-6 h-6 bg-danger text-white rounded-full text-xs font-bold flex items-center justify-center">x</button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:border-purple-500 hover:bg-purple-50 transition-colors mb-3">
+                  <span className="text-3xl mb-2">📸</span>
+                  <span className="text-sm font-medium">Prendre une photo ou importer</span>
+                  <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
+                </label>
+              )}
+            </div>
+          )}
+
+          {smartMode === "text" && (
+            <div>
+              <p className="text-sm text-muted mb-3">
+                Décris ce que tu as : &quot;j&apos;ai du lait, 6 oeufs, du beurre, 2 yaourts...&quot;
+              </p>
+              <textarea
+                value={smartText}
+                onChange={(e) => setSmartText(e.target.value)}
+                placeholder="J'ai du poivre, 2 oeufs, du lait, de la farine..."
+                rows={3}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background mb-3 focus:outline-none focus:ring-2 focus:ring-purple-300"
+              />
+            </div>
+          )}
+
+          {smartMode === "voice" && (
+            <div>
+              <p className="text-sm text-muted mb-3">
+                Appuie sur le micro et dis ce que tu as chez toi.
+              </p>
+              <button
+                onClick={startListening}
+                className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl mx-auto mb-3 transition-all ${
+                  isListening
+                    ? "bg-danger text-white animate-pulse shadow-lg"
+                    : "bg-purple-100 text-purple-600 hover:bg-purple-200"
+                }`}
+              >
+                🎤
+              </button>
+              {isListening && <p className="text-center text-sm text-danger font-medium mb-2">Parle maintenant...</p>}
+              {smartText && (
+                <div className="bg-background border border-border rounded-lg p-3 mb-3">
+                  <p className="text-sm italic text-muted">Reconnu :</p>
+                  <p className="text-sm">{smartText}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={handleSmartScan}
+            disabled={smartLoading || (!smartText.trim() && !smartImage)}
+            className="px-5 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors"
+          >
+            {smartLoading ? "Analyse en cours..." : "Analyser et ajouter"}
+          </button>
+        </div>
+      )}
 
       {/* Add panel */}
       {showAdd && (
@@ -309,6 +488,14 @@ export default function InventairePage() {
                           <p className="font-medium text-sm truncate">
                             {item.product_name}
                           </p>
+                          {(item.expiry_date || item.expires_at) && (() => {
+                            const exp = item.expiry_date || item.expires_at;
+                            if (!exp) return null;
+                            const days = Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000);
+                            const color = days < 0 ? "text-danger" : days <= 3 ? "text-orange-500" : days <= 7 ? "text-warning" : "text-muted";
+                            const label = days < 0 ? `Périmé (${-days}j)` : days === 0 ? "Expire aujourd'hui" : days === 1 ? "Expire demain" : `Expire dans ${days}j`;
+                            return <p className={`text-[10px] font-medium ${color}`}>{label}</p>;
+                          })()}
                           <div className="flex items-center gap-2 mt-0.5">
                             {viewMode === "category" && (
                               <select

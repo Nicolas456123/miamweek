@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icons";
+import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 
 type ListItem = {
   id: number;
@@ -22,39 +23,71 @@ export default function CoursesPage() {
   const [quickAdd, setQuickAdd] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
-  const fetchItems = () => {
+  const fetchItems = useCallback(() => {
     fetch("/api/list?status=active")
       .then((r) => r.json())
       .then((data) => setItems(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  };
+      .catch(() => {
+        // Offline - keep current state
+      });
+  }, []);
+
+  const { isOnline, queueSize, syncNow } = useOfflineSync(fetchItems);
 
   useEffect(() => {
     fetchItems();
 
-    // Auto-refresh every 5s for multi-user sync
-    const interval = setInterval(fetchItems, 5000);
+    // Auto-refresh every 5s for multi-user sync (only when online)
+    const interval = setInterval(() => {
+      if (navigator.onLine) fetchItems();
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchItems]);
 
-  const toggleItem = (id: number, checked: boolean) => {
-    // Optimistic update - instant visual feedback
+  const toggleItem = async (id: number, checked: boolean) => {
+    // Optimistic update - instant visual feedback always
     setItems((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, checked: !checked ? 1 : 0 } : item
       )
     );
-    // Sync with server in background
-    fetch("/api/list", {
+
+    // Send to server (queued if offline)
+    const res = await offlineFetch("/api/list", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, checked: !checked }),
-    }).catch(() => fetchItems()); // revert on error
+      offlineOptimistic: true,
+    });
+
+    // If server returned an error while online, revert
+    if (res && !res.ok && navigator.onLine) {
+      fetchItems();
+    }
   };
 
   const addQuickItem = async () => {
     if (!quickAdd.trim()) return;
-    await fetch("/api/list", {
+
+    // Optimistic: add to local list immediately
+    const tempId = -Date.now();
+    const newItem: ListItem = {
+      id: tempId,
+      product_id: null,
+      product_name: quickAdd,
+      quantity: 1,
+      unit: "pcs",
+      category: "Autre",
+      checked: 0,
+      source: "manual",
+      list_status: "active",
+      source_recipe: null,
+    };
+    setItems((prev) => [...prev, newItem]);
+    setQuickAdd("");
+    setShowQuickAdd(false);
+
+    await offlineFetch("/api/list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -65,13 +98,20 @@ export default function CoursesPage() {
         source: "manual",
         listStatus: "active",
       }),
+      offlineOptimistic: true,
     });
-    setQuickAdd("");
-    setShowQuickAdd(false);
-    fetchItems();
+
+    // Refresh to get real ID (if online)
+    if (navigator.onLine) {
+      setTimeout(fetchItems, 300);
+    }
   };
 
   const finishShopping = async () => {
+    if (!navigator.onLine) {
+      alert("Tu dois être en ligne pour terminer les courses.");
+      return;
+    }
     await fetch("/api/list/finish", { method: "POST" });
     fetchItems();
   };
@@ -83,7 +123,6 @@ export default function CoursesPage() {
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(item);
     }
-    // Keep original order - no sorting to avoid items jumping when checked
     return groups;
   }, [items]);
 
@@ -111,12 +150,47 @@ export default function CoursesPage() {
 
   return (
     <div className="max-w-xl mx-auto">
+      {/* Offline banner */}
+      {(!isOnline || queueSize > 0) && (
+        <div
+          className={`mb-3 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between ${
+            !isOnline
+              ? "bg-orange-100 text-orange-800 border border-orange-200"
+              : "bg-blue-100 text-blue-800 border border-blue-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span>{!isOnline ? "📡" : "🔄"}</span>
+            {!isOnline ? (
+              <span>
+                Mode hors-ligne — tes actions sont sauvegardées localement
+                {queueSize > 0 && ` (${queueSize} en attente)`}
+              </span>
+            ) : (
+              <span>
+                {queueSize} modification{queueSize > 1 ? "s" : ""} en attente de
+                synchronisation
+              </span>
+            )}
+          </div>
+          {isOnline && queueSize > 0 && (
+            <button
+              onClick={syncNow}
+              className="px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-semibold"
+            >
+              Sync
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">Mode courses</h1>
         <button
           onClick={finishShopping}
-          className="px-4 py-2 bg-success text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
+          disabled={!isOnline}
+          className="px-4 py-2 bg-success text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
         >
           Terminer
         </button>

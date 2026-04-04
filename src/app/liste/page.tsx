@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { PRODUCT_CATEGORIES } from "@/lib/utils";
 import { CategoryIcon } from "@/components/category-icons";
+import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 
 type Product = {
   id: number;
@@ -36,6 +37,15 @@ export default function ListePage() {
   const [showCustom, setShowCustom] = useState(false);
   const [showMobileList, setShowMobileList] = useState(false);
 
+  const fetchList = useCallback(() => {
+    fetch("/api/list?status=prep")
+      .then((r) => r.json())
+      .then((data) => setListItems(Array.isArray(data) ? data : []))
+      .catch(() => { /* offline - keep local state */ });
+  }, []);
+
+  const { isOnline, queueSize, syncNow } = useOfflineSync(fetchList);
+
   useEffect(() => {
     fetch("/api/products")
       .then((r) => r.json())
@@ -43,17 +53,12 @@ export default function ListePage() {
       .catch(console.error);
     fetchList();
 
-    // Auto-refresh every 5s for multi-user sync
-    const interval = setInterval(fetchList, 5000);
+    // Auto-refresh every 5s for multi-user sync (only when online)
+    const interval = setInterval(() => {
+      if (navigator.onLine) fetchList();
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
-
-  const fetchList = () => {
-    fetch("/api/list?status=prep")
-      .then((r) => r.json())
-      .then((data) => setListItems(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  };
+  }, [fetchList]);
 
   let nextTempId = -1;
 
@@ -74,7 +79,7 @@ export default function ListePage() {
     };
     setListItems((prev) => [...prev, newItem]);
 
-    fetch("/api/list", {
+    offlineFetch("/api/list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -86,15 +91,17 @@ export default function ListePage() {
         source: "manual",
         listStatus: "prep",
       }),
+      offlineOptimistic: true,
     })
-      .then((r) => r.json())
+      .then((r) => r?.json())
       .then((saved) => {
-        // Replace temp item with real one from server
-        setListItems((prev) =>
-          prev.map((item) => (item.id === tempId ? saved : item))
-        );
+        if (saved && !saved.queued) {
+          setListItems((prev) =>
+            prev.map((item) => (item.id === tempId ? saved : item))
+          );
+        }
       })
-      .catch(() => fetchList());
+      .catch(() => {});
   };
 
   const addCustom = () => {
@@ -117,7 +124,7 @@ export default function ListePage() {
     setCustomQty("");
     setShowCustom(false);
 
-    fetch("/api/list", {
+    offlineFetch("/api/list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -128,24 +135,28 @@ export default function ListePage() {
         source: "manual",
         listStatus: "prep",
       }),
+      offlineOptimistic: true,
     })
-      .then((r) => r.json())
+      .then((r) => r?.json())
       .then((saved) => {
-        setListItems((prev) =>
-          prev.map((item) => (item.id === tempId ? saved : item))
-        );
+        if (saved && !saved.queued) {
+          setListItems((prev) =>
+            prev.map((item) => (item.id === tempId ? saved : item))
+          );
+        }
       })
-      .catch(() => fetchList());
+      .catch(() => {});
   };
 
   const removeItem = (id: number) => {
     // Optimistic: remove instantly
     setListItems((prev) => prev.filter((item) => item.id !== id));
-    fetch("/api/list", {
+    offlineFetch("/api/list", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
-    }).catch(() => fetchList());
+      offlineOptimistic: true,
+    });
   };
 
   const updateQuantity = (id: number, quantity: number) => {
@@ -154,14 +165,19 @@ export default function ListePage() {
     setListItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, quantity } : item))
     );
-    fetch("/api/list", {
+    offlineFetch("/api/list", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, quantity }),
-    }).catch(() => fetchList());
+      offlineOptimistic: true,
+    });
   };
 
   const validateList = async () => {
+    if (!navigator.onLine) {
+      alert("Tu dois être en ligne pour valider la liste.");
+      return;
+    }
     await fetch("/api/list/validate", {
       method: "POST",
     });
@@ -196,6 +212,39 @@ export default function ListePage() {
 
   return (
     <div>
+      {/* Offline banner */}
+      {(!isOnline || queueSize > 0) && (
+        <div
+          className={`mb-3 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between ${
+            !isOnline
+              ? "bg-orange-100 text-orange-800 border border-orange-200"
+              : "bg-blue-100 text-blue-800 border border-blue-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span>{!isOnline ? "📡" : "🔄"}</span>
+            {!isOnline ? (
+              <span>
+                Mode hors-ligne — tes modifications sont sauvegardées localement
+                {queueSize > 0 && ` (${queueSize} en attente)`}
+              </span>
+            ) : (
+              <span>
+                {queueSize} modification{queueSize > 1 ? "s" : ""} en attente
+              </span>
+            )}
+          </div>
+          {isOnline && queueSize > 0 && (
+            <button
+              onClick={syncNow}
+              className="px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-semibold"
+            >
+              Sync
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">Préparer ma liste</h1>
         {listItems.length > 0 && (

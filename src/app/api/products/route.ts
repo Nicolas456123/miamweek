@@ -15,7 +15,12 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to fetch products:", error);
     return Response.json(
-      { error: "Failed to fetch products", details: String(error) },
+      {
+        error: "Failed to fetch products",
+        details: String(error),
+        dbUrl: process.env.TURSO_DATABASE_URL ? process.env.TURSO_DATABASE_URL.substring(0, 30) + "..." : "NOT SET",
+        hasToken: !!process.env.TURSO_AUTH_TOKEN,
+      },
       { status: 500 }
     );
   }

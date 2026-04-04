@@ -10,6 +10,8 @@ type Product = {
   name: string;
   category: string;
   default_unit: string;
+  default_quantity: number | null;
+  quantity_presets: string | null; // JSON array e.g. "[6, 12, 20]"
   icon: string | null;
 };
 
@@ -25,6 +27,25 @@ type ListItem = {
   list_status: string;
   source_recipe: string | null;
 };
+
+// Smart step size based on unit and default quantity
+function getStep(unit: string, defaultQty: number | null): number {
+  const u = unit.toLowerCase();
+  if (u === "g") return 50;
+  if (u === "ml") return 50;
+  if (u === "kg") return 0.5;
+  if (u === "l") return 0.25;
+  // For pieces/lots/boîtes, step by 1
+  return 1;
+}
+
+// Format quantity for display (remove trailing .0)
+function fmtQty(qty: number): string {
+  if (Number.isInteger(qty)) return String(qty);
+  // Show max 2 decimals
+  const s = qty.toFixed(2).replace(/\.?0+$/, "");
+  return s;
+}
 
 export default function ListePage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -62,14 +83,15 @@ export default function ListePage() {
 
   let nextTempId = -1;
 
-  const addProduct = (product: Product) => {
+  const addProduct = (product: Product, qty?: number) => {
+    const defaultQty = qty || product.default_quantity || 1;
     // Optimistic: add to list instantly
     const tempId = nextTempId--;
     const newItem: ListItem = {
       id: tempId,
       product_id: product.id,
       product_name: product.name,
-      quantity: 1,
+      quantity: defaultQty,
       unit: product.default_unit,
       category: product.category,
       checked: 0,
@@ -85,7 +107,7 @@ export default function ListePage() {
       body: JSON.stringify({
         productId: product.id,
         productName: product.name,
-        quantity: 1,
+        quantity: defaultQty,
         unit: product.default_unit,
         category: product.category,
         source: "manual",
@@ -304,6 +326,12 @@ export default function ListePage() {
             {filteredProducts.map((product) => {
               const listItem = getListItem(product.id);
               const inList = !!listItem;
+              const presets = product.quantity_presets
+                ? (() => { try { return JSON.parse(product.quantity_presets!) as number[]; } catch { return null; } })()
+                : null;
+              const step = getStep(product.default_unit, product.default_quantity);
+              const defaultQty = product.default_quantity || 1;
+
               return (
                 <div
                   key={product.id}
@@ -316,32 +344,59 @@ export default function ListePage() {
                 >
                   <span className="text-xl">{product.icon || "🛒"}</span>
                   <p className="font-medium mt-1 truncate">{product.name}</p>
+
                   {inList && listItem ? (
-                    <div className="flex items-center gap-1 mt-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateQuantity(listItem.id, (listItem.quantity || 1) - 1);
-                        }}
-                        className="w-6 h-6 rounded-full bg-white/80 text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger"
-                      >
-                        -
-                      </button>
-                      <span className="text-xs font-bold text-primary w-12 text-center">
-                        {listItem.quantity || 1} {listItem.unit}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateQuantity(listItem.id, (listItem.quantity || 1) + 1);
-                        }}
-                        className="w-6 h-6 rounded-full bg-white/80 text-xs font-bold flex items-center justify-center hover:bg-primary hover:text-white"
-                      >
-                        +
-                      </button>
+                    <div className="mt-1">
+                      {/* Presets row if available */}
+                      {presets && (
+                        <div className="flex gap-1 mb-1 flex-wrap">
+                          {presets.map((p) => (
+                            <button
+                              key={p}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateQuantity(listItem.id, p);
+                              }}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                listItem.quantity === p
+                                  ? "bg-primary text-white"
+                                  : "bg-white/80 text-muted hover:text-primary"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* +/- controls */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(listItem.id, (listItem.quantity || defaultQty) - step);
+                          }}
+                          className="w-6 h-6 rounded-full bg-white/80 text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger"
+                        >
+                          -
+                        </button>
+                        <span className="text-xs font-bold text-primary w-14 text-center">
+                          {fmtQty(listItem.quantity || defaultQty)} {listItem.unit}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(listItem.id, (listItem.quantity || defaultQty) + step);
+                          }}
+                          className="w-6 h-6 rounded-full bg-white/80 text-xs font-bold flex items-center justify-center hover:bg-primary hover:text-white"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted">{product.default_unit}</p>
+                    <p className="text-xs text-muted">
+                      {fmtQty(defaultQty)} {product.default_unit}
+                    </p>
                   )}
                   {inList && (
                     <div className="absolute top-2 right-2 w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center">
@@ -558,7 +613,9 @@ function ListContent({
               <CategoryIcon category={category} size={12} />
               {category}
             </p>
-            {items.map((item) => (
+            {items.map((item) => {
+              const step = getStep(item.unit || "pcs", item.quantity);
+              return (
               <div
                 key={item.id}
                 className={`flex items-center gap-2 py-1.5 group ${
@@ -576,18 +633,18 @@ function ListContent({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() =>
-                      updateQuantity(item.id, (item.quantity || 1) - 1)
+                      updateQuantity(item.id, (item.quantity || 1) - step)
                     }
                     className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger"
                   >
                     -
                   </button>
-                  <span className="text-xs w-8 text-center font-medium">
-                    {item.quantity || 1}
+                  <span className="text-xs w-12 text-center font-medium">
+                    {fmtQty(item.quantity || 1)}
                   </span>
                   <button
                     onClick={() =>
-                      updateQuantity(item.id, (item.quantity || 1) + 1)
+                      updateQuantity(item.id, (item.quantity || 1) + step)
                     }
                     className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-primary-light hover:text-primary"
                   >
@@ -612,7 +669,8 @@ function ListContent({
                   </svg>
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         ))}
     </div>

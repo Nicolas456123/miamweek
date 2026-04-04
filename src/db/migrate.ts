@@ -1229,6 +1229,8 @@ async function migrate() {
       name TEXT NOT NULL,
       category TEXT NOT NULL,
       default_unit TEXT NOT NULL,
+      default_quantity REAL DEFAULT 1,
+      quantity_presets TEXT,
       icon TEXT,
       is_custom INTEGER DEFAULT 0,
       sort_order INTEGER DEFAULT 100,
@@ -1309,11 +1311,175 @@ async function migrate() {
     "ALTER TABLE recipes ADD COLUMN steps TEXT",
     "ALTER TABLE recipe_ingredients ADD COLUMN product_id INTEGER REFERENCES products(id) ON DELETE SET NULL",
     "ALTER TABLE products ADD COLUMN sort_order INTEGER DEFAULT 100",
+    "ALTER TABLE products ADD COLUMN default_quantity REAL DEFAULT 1",
+    "ALTER TABLE products ADD COLUMN quantity_presets TEXT",
   ];
 
   for (const q of alterQueries) {
     try { await client.execute(q); } catch { /* column already exists */ }
   }
+
+  // Set sensible default quantities and presets for products
+  console.log("Setting default quantities and presets...");
+
+  const defaultQuantities: [string, number, string?][] = [
+    // [product_name, default_qty, presets_json?]
+    // Fruits & Légumes - sold by kg or piece
+    ["Pommes", 1],
+    ["Bananes", 1],
+    ["Oranges", 1],
+    ["Citrons", 2],
+    ["Fraises", 250],
+    ["Tomates", 500],
+    ["Carottes", 500],
+    ["Oignons", 500],
+    ["Ail", 1],
+    ["Pommes de terre", 1],
+    ["Courgettes", 2],
+    ["Aubergines", 1],
+    ["Poivrons", 2],
+    ["Concombre", 1],
+    ["Salade", 1],
+    ["Champignons", 250],
+    ["Brocoli", 1],
+    ["Haricots verts", 250],
+    ["Petits pois", 250],
+    ["Épinards", 200],
+    ["Avocat", 2],
+    ["Poireaux", 2],
+
+    // Viandes & Poissons - quantities in grams
+    ["Poulet (filets)", 500],
+    ["Poulet (entier)", 1],
+    ["Steak haché", 2],
+    ["Boeuf (bavette)", 400],
+    ["Porc (côtes)", 500],
+    ["Lardons", 200],
+    ["Jambon", 4],
+    ["Saucisses", 4],
+    ["Saumon", 300],
+    ["Cabillaud", 300],
+    ["Crevettes", 200],
+    ["Thon (frais)", 300],
+    ["Dinde", 400],
+    ["Merguez", 6],
+    ["Agneau", 500],
+
+    // Produits laitiers
+    ["Lait", 1],
+    ["Beurre", 250],
+    ["Crème fraîche", 200],
+    ["Yaourts nature", 1],
+    ["Fromage râpé", 200],
+    ["Comté", 200],
+    ["Camembert", 1],
+    ["Mozzarella", 125],
+    ["Parmesan", 100],
+    ["Oeufs", 6, "[6, 10, 12, 20]"],
+    ["Crème liquide", 200],
+    ["Fromage blanc", 500],
+    ["Chèvre frais", 1],
+    ["Mascarpone", 250],
+    ["Ricotta", 250],
+    ["Lait de coco", 400],
+
+    // Boulangerie
+    ["Pain de mie", 1],
+    ["Baguette", 1],
+    ["Croissants", 4, "[2, 4, 6, 8]"],
+    ["Pain complet", 1],
+    ["Brioche", 1],
+    ["Wraps/Tortillas", 1],
+    ["Pain burger", 1, "[2, 4, 6]"],
+    ["Biscottes", 1],
+    ["Pâte feuilletée", 1],
+    ["Pâte brisée", 1],
+
+    // Épicerie - sensible pack sizes
+    ["Pâtes", 500],
+    ["Riz", 500],
+    ["Semoule", 500],
+    ["Farine", 1000, "[500, 1000]"],
+    ["Sucre", 1000, "[500, 1000]"],
+    ["Sel", 500],
+    ["Poivre", 50],
+    ["Huile d'olive", 0.75],
+    ["Huile tournesol", 1],
+    ["Vinaigre", 250],
+    ["Sauce tomate", 1],
+    ["Concentré de tomates", 1],
+    ["Lentilles", 500],
+    ["Pois chiches", 1],
+    ["Conserves de thon", 1],
+    ["Conserves de maïs", 1],
+    ["Olives", 1],
+    ["Chocolat", 200],
+    ["Café", 250],
+    ["Thé", 1],
+    ["Nouilles chinoises", 250],
+    ["Haricots rouges", 1],
+    ["Chapelure", 200],
+    ["Maïzena", 250],
+
+    // Surgelés
+    ["Pizza surgelée", 1],
+    ["Légumes surgelés", 600],
+    ["Frites", 1000, "[500, 1000]"],
+    ["Poisson pané", 4, "[4, 8, 10]"],
+    ["Glaces", 1],
+    ["Fruits surgelés", 500],
+    ["Nuggets", 400, "[200, 400, 600]"],
+    ["Épinards surgelés", 500],
+
+    // Boissons
+    ["Eau plate", 1.5],
+    ["Eau gazeuse", 1],
+    ["Jus d'orange", 1],
+    ["Coca-Cola", 1.5],
+    ["Bière", 1],
+    ["Vin rouge", 1],
+    ["Vin blanc", 1],
+    ["Lait d'amande", 1],
+
+    // Hygiène
+    ["Papier toilette", 1],
+    ["Gel douche", 1],
+    ["Shampoing", 1],
+    ["Dentifrice", 1],
+
+    // Entretien
+    ["Sopalin", 1],
+    ["Éponges", 1],
+    ["Liquide vaisselle", 1],
+    ["Sacs poubelle", 1],
+    ["Lessive", 1],
+    ["Pastilles lave-vaisselle", 1],
+
+    // Épices - individual pots/packets
+    ["Herbes de Provence", 1],
+    ["Bouillon cube", 1],
+    ["Sauce soja", 150],
+    ["Curry", 1],
+    ["Paprika", 1],
+    ["Cumin", 1],
+    ["Cannelle", 1],
+    ["Levure", 1],
+  ];
+
+  for (const [name, qty, presets] of defaultQuantities) {
+    if (presets) {
+      await client.execute({
+        sql: "UPDATE products SET default_quantity = ?, quantity_presets = ? WHERE name = ?",
+        args: [qty, presets, name],
+      });
+    } else {
+      await client.execute({
+        sql: "UPDATE products SET default_quantity = ? WHERE name = ?",
+        args: [qty, name],
+      });
+    }
+  }
+  console.log("Default quantities set!");
 
   // Seed product catalog
   const existing = await client.execute("SELECT COUNT(*) as count FROM products");

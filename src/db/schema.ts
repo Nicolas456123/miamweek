@@ -48,6 +48,8 @@ export const products = sqliteTable("products", {
   name: text("name").notNull(),
   category: text("category").notNull(),
   defaultUnit: text("default_unit").notNull(),
+  defaultQuantity: real("default_quantity").default(1),
+  quantityPresets: text("quantity_presets"), // JSON array e.g. [6, 12, 20] for eggs
   icon: text("icon"),
   isCustom: integer("is_custom", { mode: "boolean" }).default(false),
   createdAt: text("created_at").default("CURRENT_TIMESTAMP"),

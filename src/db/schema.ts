@@ -110,6 +110,19 @@ export const pantryItems = sqliteTable("pantry_items", {
   expiresAt: text("expires_at"),
 });
 
+// ── Food preferences ─────────────────────────────────────────────────
+
+export const foodPreferences = sqliteTable("food_preferences", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  productId: integer("product_id").references(() => products.id, {
+    onDelete: "cascade",
+  }),
+  productName: text("product_name").notNull(),
+  status: text("status").notNull(), // "dislike" | "allergy" | "love"
+  note: text("note"),
+  createdAt: text("created_at").default("CURRENT_TIMESTAMP"),
+});
+
 // ── Price history ─────────────────────────────────────────────────────
 
 export const priceHistory = sqliteTable("price_history", {

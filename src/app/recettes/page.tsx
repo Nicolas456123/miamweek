@@ -208,16 +208,38 @@ export default function RecettesPage() {
         </div>
       </div>
 
-      {/* Search + filter */}
-      <div className="flex gap-2 mb-4">
+      {/* Search */}
+      <div className="mb-3">
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Rechercher une recette ou un ingrédient..."
-          className="flex-1 bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
-          className="bg-card border border-border rounded-xl px-3 py-2 text-sm">
-          <option value="">Toutes</option>
-          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+          className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+      </div>
+
+      {/* Category filter tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+        <button
+          onClick={() => setFilterCategory("")}
+          className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+            !filterCategory
+              ? "bg-primary text-white shadow-sm"
+              : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
+          }`}
+        >
+          Toutes
+        </button>
+        {categories.map((c) => (
+          <button
+            key={c}
+            onClick={() => setFilterCategory(filterCategory === c ? "" : c)}
+            className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+              filterCategory === c
+                ? "bg-primary text-white shadow-sm"
+                : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
+            }`}
+          >
+            {c}
+          </button>
+        ))}
       </div>
 
       {/* Add/Edit form */}

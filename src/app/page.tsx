@@ -33,6 +33,13 @@ const quickLinks = [
     color: "bg-purple-50 text-purple-600",
   },
   {
+    href: "/preferences",
+    title: "Mes goûts",
+    description: "Aliments aimés, détestés ou allergènes",
+    icon: "❤️",
+    color: "bg-pink-50 text-pink-600",
+  },
+  {
     href: "/suivi",
     title: "Suivi & Stats",
     description: "Prix, dépenses, consommation",

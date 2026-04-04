@@ -21,6 +21,20 @@ export const MEAL_TYPES = {
   dinner: "Soir",
 } as const;
 
+export const MEAL_SLOTS = {
+  lunch_entree: { label: "Entrée", period: "lunch", icon: "🥗", color: "text-green-600" },
+  lunch_plat: { label: "Plat", period: "lunch", icon: "🍽️", color: "text-orange-600" },
+  lunch_dessert: { label: "Dessert", period: "lunch", icon: "🍰", color: "text-pink-600" },
+  lunch_boisson: { label: "Boisson", period: "lunch", icon: "🍷", color: "text-blue-600" },
+  dinner_entree: { label: "Entrée", period: "dinner", icon: "🥗", color: "text-green-600" },
+  dinner_plat: { label: "Plat", period: "dinner", icon: "🍽️", color: "text-orange-600" },
+  dinner_dessert: { label: "Dessert", period: "dinner", icon: "🍰", color: "text-pink-600" },
+  dinner_boisson: { label: "Boisson", period: "dinner", icon: "🍷", color: "text-blue-600" },
+  // Legacy support
+  lunch: { label: "Midi", period: "lunch", icon: "🍽️", color: "text-orange-600" },
+  dinner: { label: "Soir", period: "dinner", icon: "🍽️", color: "text-orange-600" },
+} as const;
+
 export const CATEGORIES = [
   "Fruits & Légumes",
   "Viandes & Poissons",

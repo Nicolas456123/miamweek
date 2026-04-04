@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { getMonday, DAYS, MEAL_TYPES } from "@/lib/utils";
+import { getMonday, DAYS, MEAL_TYPES, MEAL_SLOTS } from "@/lib/utils";
 
 type Recipe = {
   id: number;
@@ -132,6 +132,16 @@ export default function PlanningPage() {
     meals.filter(
       (m) => m.day_of_week === day && m.meal_type === type
     );
+
+  const getMealsForPeriod = (day: number, period: "lunch" | "dinner") =>
+    meals.filter(
+      (m) => m.day_of_week === day && (m.meal_type === period || m.meal_type.startsWith(`${period}_`))
+    );
+
+  const getSlotLabel = (mealType: string) => {
+    const slot = MEAL_SLOTS[mealType as keyof typeof MEAL_SLOTS];
+    return slot || { label: mealType, icon: "🍽️", color: "text-muted" };
+  };
 
   const getRecipeName = (meal: MealEntry) => {
     if (meal.custom_name) return meal.custom_name;
@@ -321,7 +331,7 @@ export default function PlanningPage() {
               {/* Meal slots */}
               <div className="grid grid-cols-2 divide-x divide-border">
                 {(["lunch", "dinner"] as const).map((mealType) => {
-                  const slotMeals = getMealsForSlot(dayIndex, mealType);
+                  const periodMeals = getMealsForPeriod(dayIndex, mealType);
                   const isAdding =
                     addingSlot?.day === dayIndex &&
                     addingSlot?.type === mealType;
@@ -332,23 +342,24 @@ export default function PlanningPage() {
                         {MEAL_TYPES[mealType]}
                       </p>
 
-                      {/* Existing meals */}
-                      {slotMeals.map((meal) => {
-                        const cat = getRecipeCategory(meal);
+                      {/* Existing meals with sub-category labels */}
+                      {periodMeals.map((meal) => {
+                        const slotInfo = getSlotLabel(meal.meal_type);
+                        const isSubSlot = meal.meal_type.includes("_");
                         return (
                           <div
                             key={meal.id}
                             className="group flex items-center gap-2 mb-1.5"
                           >
                             <div className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-sm">
+                              {isSubSlot && (
+                                <span className={`text-xs ${slotInfo.color} mr-1`}>
+                                  {slotInfo.icon}
+                                </span>
+                              )}
                               <span className="font-medium">
                                 {getRecipeName(meal)}
                               </span>
-                              {cat && (
-                                <span className="ml-1.5 text-xs text-muted">
-                                  {cat}
-                                </span>
-                              )}
                             </div>
                             <button
                               onClick={() => removeMeal(meal.id)}

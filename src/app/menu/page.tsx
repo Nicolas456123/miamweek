@@ -30,6 +30,13 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [addedToList, setAddedToList] = useState(false);
+  const [includeEntree, setIncludeEntree] = useState(true);
+  const [includePlat, setIncludePlat] = useState(true);
+  const [includeDessert, setIncludeDessert] = useState(true);
+  const [includeBoisson, setIncludeBoisson] = useState(true);
+  const [planningDay, setPlanningDay] = useState(0);
+  const [planningMeal, setPlanningMeal] = useState<"lunch" | "dinner">("dinner");
+  const [addedToPlanning, setAddedToPlanning] = useState(false);
 
   useEffect(() => {
     fetch("/api/recipes")
@@ -63,69 +70,119 @@ export default function MenuPage() {
 
   const addMenuToList = async () => {
     if (!selectedPlat) return;
-    // Add main dish ingredients
-    for (const ing of selectedPlat.ingredients) {
-      await fetch("/api/list", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productName: ing.name,
-          quantity: ing.quantity || 1,
-          unit: ing.unit || "pcs",
-          category: ing.category || "Autre",
-          source: "recipe",
-          listStatus: "prep",
-          sourceRecipe: `Menu: ${selectedPlat.name}`,
-        }),
-      });
+    const menuLabel = `Menu: ${selectedPlat.name}`;
+
+    // Add plat principal ingredients
+    if (includePlat) {
+      for (const ing of selectedPlat.ingredients) {
+        await fetch("/api/list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productName: ing.name,
+            quantity: ing.quantity || 1,
+            unit: ing.unit || "pcs",
+            category: ing.category || "Autre",
+            source: "recipe",
+            listStatus: "prep",
+            sourceRecipe: menuLabel,
+          }),
+        });
+      }
     }
-    // Add suggestions names as notes
-    if (suggestions?.entree) {
+    if (includeEntree && suggestions?.entree) {
       await fetch("/api/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName: `Entrée: ${suggestions.entree.name}`,
-          quantity: 1,
-          unit: "pcs",
-          category: "Autre",
-          source: "recipe",
-          listStatus: "prep",
-          sourceRecipe: `Menu: ${selectedPlat.name}`,
+          quantity: 1, unit: "pcs", category: "Autre",
+          source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
         }),
       });
     }
-    if (suggestions?.dessert) {
+    if (includeDessert && suggestions?.dessert) {
       await fetch("/api/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName: `Dessert: ${suggestions.dessert.name}`,
-          quantity: 1,
-          unit: "pcs",
-          category: "Autre",
-          source: "recipe",
-          listStatus: "prep",
-          sourceRecipe: `Menu: ${selectedPlat.name}`,
+          quantity: 1, unit: "pcs", category: "Autre",
+          source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
         }),
       });
     }
-    if (suggestions?.boisson) {
+    if (includeBoisson && suggestions?.boisson) {
       await fetch("/api/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName: `Boisson: ${suggestions.boisson.name}`,
-          quantity: 1,
-          unit: "bout.",
-          category: "Boissons",
-          source: "recipe",
-          listStatus: "prep",
-          sourceRecipe: `Menu: ${selectedPlat.name}`,
+          quantity: 1, unit: "bout.", category: "Boissons",
+          source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
         }),
       });
     }
     setAddedToList(true);
+  };
+
+  const addToPlanning = async () => {
+    if (!selectedPlat) return;
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - day + (day === 0 ? -6 : 1));
+    const weekStart = monday.toISOString().split("T")[0];
+
+    const baseType = planningMeal; // "lunch" or "dinner"
+
+    // Add each selected component as a separate entry
+    if (includeEntree && suggestions?.entree) {
+      await fetch("/api/meal-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekStart, dayOfWeek: planningDay,
+          mealType: `${baseType}_entree`,
+          customName: suggestions.entree.name,
+        }),
+      });
+    }
+    if (includePlat) {
+      await fetch("/api/meal-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekStart, dayOfWeek: planningDay,
+          mealType: `${baseType}_plat`,
+          recipeId: selectedPlat.id,
+          customName: selectedPlat.name,
+        }),
+      });
+    }
+    if (includeDessert && suggestions?.dessert) {
+      await fetch("/api/meal-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekStart, dayOfWeek: planningDay,
+          mealType: `${baseType}_dessert`,
+          customName: suggestions.dessert.name,
+        }),
+      });
+    }
+    if (includeBoisson && suggestions?.boisson) {
+      await fetch("/api/meal-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekStart, dayOfWeek: planningDay,
+          mealType: `${baseType}_boisson`,
+          customName: suggestions.boisson.name,
+        }),
+      });
+    }
+    setAddedToPlanning(true);
   };
 
   const filteredRecipes = search
@@ -216,68 +273,153 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Step 3: Suggestions */}
+      {/* Step 3: Suggestions with toggles */}
       {suggestions && (
         <div className="bg-card border-2 border-primary/30 rounded-xl p-4 mb-4">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <span className="w-6 h-6 bg-primary text-white rounded-full text-xs flex items-center justify-center font-bold">3</span>
             Menu suggéré
+            <span className="text-xs text-muted font-normal ml-auto">Coche ce que tu veux</span>
           </h2>
 
           <div className="space-y-3">
             {suggestions.entree && (
-              <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl p-3">
-                <span className="text-2xl">🥗</span>
+              <button
+                onClick={() => setIncludeEntree(!includeEntree)}
+                className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
+                  includeEntree
+                    ? "bg-green-50 border-2 border-green-300"
+                    : "bg-gray-50 border-2 border-transparent opacity-50"
+                }`}
+              >
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
+                  includeEntree ? "bg-green-500 border-green-500 text-white" : "border-gray-300"
+                }`}>
+                  {includeEntree && "✓"}
+                </div>
+                <span className="text-2xl shrink-0">🥗</span>
                 <div>
                   <p className="text-xs font-semibold text-green-600 uppercase">Entrée</p>
                   <p className="font-medium text-sm">{suggestions.entree.name}</p>
                   <p className="text-xs text-muted">{suggestions.entree.description}</p>
                 </div>
-              </div>
+              </button>
             )}
 
-            <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl p-3">
-              <span className="text-2xl">🍽️</span>
+            <button
+              onClick={() => setIncludePlat(!includePlat)}
+              className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
+                includePlat
+                  ? "bg-orange-50 border-2 border-orange-300"
+                  : "bg-gray-50 border-2 border-transparent opacity-50"
+              }`}
+            >
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
+                includePlat ? "bg-orange-500 border-orange-500 text-white" : "border-gray-300"
+              }`}>
+                {includePlat && "✓"}
+              </div>
+              <span className="text-2xl shrink-0">🍽️</span>
               <div>
                 <p className="text-xs font-semibold text-orange-600 uppercase">Plat principal</p>
                 <p className="font-medium text-sm">{selectedPlat?.name}</p>
                 <p className="text-xs text-muted">{selectedPlat?.description}</p>
               </div>
-            </div>
+            </button>
 
             {suggestions.dessert && (
-              <div className="flex items-start gap-3 bg-pink-50 border border-pink-200 rounded-xl p-3">
-                <span className="text-2xl">🍰</span>
+              <button
+                onClick={() => setIncludeDessert(!includeDessert)}
+                className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
+                  includeDessert
+                    ? "bg-pink-50 border-2 border-pink-300"
+                    : "bg-gray-50 border-2 border-transparent opacity-50"
+                }`}
+              >
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
+                  includeDessert ? "bg-pink-500 border-pink-500 text-white" : "border-gray-300"
+                }`}>
+                  {includeDessert && "✓"}
+                </div>
+                <span className="text-2xl shrink-0">🍰</span>
                 <div>
                   <p className="text-xs font-semibold text-pink-600 uppercase">Dessert</p>
                   <p className="font-medium text-sm">{suggestions.dessert.name}</p>
                   <p className="text-xs text-muted">{suggestions.dessert.description}</p>
                 </div>
-              </div>
+              </button>
             )}
 
             {suggestions.boisson && (
-              <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
-                <span className="text-2xl">🍷</span>
+              <button
+                onClick={() => setIncludeBoisson(!includeBoisson)}
+                className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
+                  includeBoisson
+                    ? "bg-blue-50 border-2 border-blue-300"
+                    : "bg-gray-50 border-2 border-transparent opacity-50"
+                }`}
+              >
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
+                  includeBoisson ? "bg-blue-500 border-blue-500 text-white" : "border-gray-300"
+                }`}>
+                  {includeBoisson && "✓"}
+                </div>
+                <span className="text-2xl shrink-0">🍷</span>
                 <div>
                   <p className="text-xs font-semibold text-blue-600 uppercase">Boisson</p>
                   <p className="font-medium text-sm">{suggestions.boisson.name}</p>
                   <p className="text-xs text-muted">{suggestions.boisson.description}</p>
                 </div>
-              </div>
+              </button>
             )}
           </div>
 
+          {/* Planning picker */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-sm font-medium mb-2">Ajouter au planning</p>
+            <div className="flex gap-2 mb-3">
+              <select
+                value={planningDay}
+                onChange={(e) => setPlanningDay(Number(e.target.value))}
+                className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm"
+              >
+                {["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"].map((d, i) => (
+                  <option key={i} value={i}>{d}</option>
+                ))}
+              </select>
+              <select
+                value={planningMeal}
+                onChange={(e) => setPlanningMeal(e.target.value as "lunch" | "dinner")}
+                className="bg-background border border-border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="lunch">Midi</option>
+                <option value="dinner">Soir</option>
+              </select>
+              <button
+                onClick={addToPlanning}
+                disabled={addedToPlanning}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  addedToPlanning
+                    ? "bg-blue-100 text-blue-600"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                {addedToPlanning ? "Planifié !" : "📅 Planifier"}
+              </button>
+            </div>
+          </div>
+
+          {/* Add to shopping list */}
           <button
             onClick={addMenuToList}
-            disabled={addedToList}
-            className={`mt-4 w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
+            disabled={addedToList || (!includePlat && !includeEntree && !includeDessert && !includeBoisson)}
+            className={`w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
               addedToList
                 ? "bg-primary-light text-primary"
-                : "bg-primary text-white hover:bg-primary-hover"
+                : "bg-primary text-white hover:bg-primary-hover disabled:opacity-50"
             }`}
           >
-            {addedToList ? "Ajouté à ma liste !" : "Ajouter tout le menu à ma liste"}
+            {addedToList ? "Ajouté à ma liste !" : "🛒 Ajouter les ingrédients à ma liste"}
           </button>
         </div>
       )}

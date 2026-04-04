@@ -4,22 +4,30 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { text } = body;
+  const { text, image } = body; // image = base64 data URL or raw base64
 
-  if (!text) {
-    return Response.json({ error: "text is required" }, { status: 400 });
+  if (!text && !image) {
+    return Response.json(
+      { error: "text or image is required" },
+      { status: 400 }
+    );
   }
 
-  let parsed: { store?: string; date: string; items: { name: string; price: number }[]; total?: number };
+  let parsed: {
+    store?: string;
+    date: string;
+    items: { name: string; price: number }[];
+    total?: number;
+  };
 
   if (!process.env.ANTHROPIC_API_KEY) {
     // Mock response when no API key
     parsed = {
-      store: "Supermarche",
+      store: "Supermarché",
       date: new Date().toISOString().split("T")[0],
       items: [
         { name: "Produit exemple 1", price: 2.99 },
-        { name: "Produit exemple 2", price: 1.50 },
+        { name: "Produit exemple 2", price: 1.5 },
       ],
       total: 4.49,
     };
@@ -27,12 +35,53 @@ export async function POST(request: Request) {
     const Anthropic = (await import("@anthropic-ai/sdk")).default;
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+    const systemPrompt =
+      'Tu es un assistant qui extrait les données d\'un ticket de caisse. Réponds UNIQUEMENT avec du JSON valide (pas de markdown). Format: {"store": "nom", "date": "YYYY-MM-DD", "items": [{"name": "produit", "price": 1.99}], "total": 10.50}';
+
+    type MediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content: any[] = [];
+
+    if (image) {
+      // Extract base64 data and media type from data URL
+      let mediaType: MediaType = "image/jpeg";
+      let base64Data = image;
+
+      if (image.startsWith("data:")) {
+        const match = image.match(
+          /^data:(image\/[a-zA-Z+]+);base64,(.+)$/
+        );
+        if (match) {
+          const detected = match[1];
+          if (["image/jpeg", "image/png", "image/gif", "image/webp"].includes(detected)) {
+            mediaType = detected as MediaType;
+          }
+          base64Data = match[2];
+        }
+      }
+
+      content.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: base64Data,
+        },
+      });
+      content.push({
+        type: "text",
+        text: "Extrais toutes les informations de ce ticket de caisse : magasin, date, liste des produits avec prix, et total.",
+      });
+    } else {
+      content.push({ type: "text", text: text });
+    }
+
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system:
-        'Tu es un assistant qui extrait les donn\u00e9es d\'un ticket de caisse. R\u00e9ponds UNIQUEMENT avec du JSON valide (pas de markdown). Format: {"store": "nom", "date": "YYYY-MM-DD", "items": [{"name": "produit", "price": 1.99}], "total": 10.50}',
-      messages: [{ role: "user", content: text }],
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: "user", content }],
     });
 
     const responseText =
@@ -51,7 +100,13 @@ export async function POST(request: Request) {
   for (const item of parsed.items) {
     const entryResult = await query(
       "INSERT INTO price_history (product_name, price, date, store, receipt_id) VALUES (?, ?, ?, ?, ?) RETURNING *",
-      [item.name, item.price, parsed.date, parsed.store || null, receipt.id as number]
+      [
+        item.name,
+        item.price,
+        parsed.date,
+        parsed.store || null,
+        receipt.id as number,
+      ]
     );
     priceEntries.push(entryResult.rows[0]);
   }

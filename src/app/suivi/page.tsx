@@ -34,6 +34,8 @@ export default function SuiviPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [scanning, setScanning] = useState(false);
   const [ticketText, setTicketText] = useState("");
+  const [ticketImage, setTicketImage] = useState<string | null>(null);
+  const [scanMode, setScanMode] = useState<"text" | "photo">("photo");
 
   useEffect(() => {
     if (tab === "stock") {
@@ -55,17 +57,24 @@ export default function SuiviPage() {
   }, [tab]);
 
   const scanTicket = async () => {
-    if (!ticketText.trim()) return;
+    if (!ticketText.trim() && !ticketImage) return;
     setScanning(true);
     try {
+      const payload: { text?: string; image?: string } = {};
+      if (ticketImage) {
+        payload.image = ticketImage;
+      } else {
+        payload.text = ticketText;
+      }
       const res = await fetch("/api/receipts/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: ticketText }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.receipt) {
         setTicketText("");
+        setTicketImage(null);
         setTab("tickets");
         fetch("/api/receipts")
           .then((r) => r.json())
@@ -76,6 +85,16 @@ export default function SuiviPage() {
       console.error(err);
     }
     setScanning(false);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setTicketImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateStockStatus = async (id: number, status: string) => {
@@ -231,19 +250,99 @@ export default function SuiviPage() {
           {/* Scan area */}
           <div className="bg-card border border-border rounded-xl p-4 mb-4">
             <h3 className="font-semibold mb-2">Scanner un ticket</h3>
-            <p className="text-sm text-muted mb-3">
-              Copie-colle le contenu de ton ticket ou décris les articles et prix. L&apos;IA va extraire les données.
-            </p>
-            <textarea
-              value={ticketText}
-              onChange={(e) => setTicketText(e.target.value)}
-              placeholder={"Ex:\nCarrefour 04/04/2026\nPâtes Barilla 1,29\nLait 1L 0,95\nPoulet 500g 4,50\nTotal: 6,74"}
-              rows={5}
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background mb-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
+
+            {/* Mode toggle */}
+            <div className="flex gap-1 bg-background border border-border rounded-lg p-0.5 mb-3 w-fit">
+              <button
+                onClick={() => setScanMode("photo")}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                  scanMode === "photo"
+                    ? "bg-primary text-white"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                📸 Photo
+              </button>
+              <button
+                onClick={() => setScanMode("text")}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                  scanMode === "text"
+                    ? "bg-primary text-white"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                📝 Texte
+              </button>
+            </div>
+
+            {scanMode === "photo" ? (
+              <div>
+                <p className="text-sm text-muted mb-3">
+                  Prends en photo ton ticket de caisse ou importe une image. L&apos;IA va extraire automatiquement les produits et prix.
+                </p>
+                {ticketImage ? (
+                  <div className="mb-3">
+                    <div className="relative inline-block">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={ticketImage}
+                        alt="Ticket de caisse"
+                        className="max-h-64 rounded-lg border border-border"
+                      />
+                      <button
+                        onClick={() => setTicketImage(null)}
+                        className="absolute top-2 right-2 w-6 h-6 bg-danger text-white rounded-full text-xs font-bold flex items-center justify-center"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 mb-3">
+                    <label className="flex-1 flex flex-col items-center justify-center py-8 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary hover:bg-primary-light/30 transition-colors">
+                      <span className="text-3xl mb-2">📸</span>
+                      <span className="text-sm font-medium">Prendre une photo</span>
+                      <span className="text-xs text-muted">ou importer depuis la galerie</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    <label className="flex-1 flex flex-col items-center justify-center py-8 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary hover:bg-primary-light/30 transition-colors">
+                      <span className="text-3xl mb-2">🖼️</span>
+                      <span className="text-sm font-medium">Importer une image</span>
+                      <span className="text-xs text-muted">JPG, PNG, HEIC...</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-muted mb-3">
+                  Copie-colle le contenu de ton ticket ou décris les articles et prix.
+                </p>
+                <textarea
+                  value={ticketText}
+                  onChange={(e) => setTicketText(e.target.value)}
+                  placeholder={"Ex:\nCarrefour 04/04/2026\nPâtes Barilla 1,29\nLait 1L 0,95\nPoulet 500g 4,50\nTotal: 6,74"}
+                  rows={5}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background mb-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+            )}
+
             <button
               onClick={scanTicket}
-              disabled={scanning || !ticketText.trim()}
+              disabled={scanning || (!ticketText.trim() && !ticketImage)}
               className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50 transition-colors"
             >
               {scanning ? "Analyse en cours..." : "Analyser avec IA"}

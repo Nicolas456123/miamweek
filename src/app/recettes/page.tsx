@@ -43,6 +43,7 @@ export default function RecettesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [addedToList, setAddedToList] = useState<Set<number>>(new Set());
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -168,6 +169,39 @@ export default function RecettesPage() {
     } catch (err) { console.error(err); }
     setAiLoading(false);
     setAiPrompt("");
+  };
+
+  const addAllToList = async (recipe: Recipe) => {
+    for (const ing of recipe.ingredients) {
+      await fetch("/api/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName: ing.name,
+          quantity: ing.quantity || 1,
+          unit: ing.unit || "pcs",
+          category: ing.category || "Autre",
+          source: "recipe",
+          listStatus: "prep",
+        }),
+      });
+    }
+    setAddedToList((prev) => new Set(prev).add(recipe.id));
+  };
+
+  const addOneToList = async (ing: Ingredient) => {
+    await fetch("/api/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productName: ing.name,
+        quantity: ing.quantity || 1,
+        unit: ing.unit || "pcs",
+        category: ing.category || "Autre",
+        source: "recipe",
+        listStatus: "prep",
+      }),
+    });
   };
 
   // Get unique categories
@@ -421,6 +455,14 @@ export default function RecettesPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-2">
+                    <button onClick={(e) => { e.stopPropagation(); addAllToList(recipe); }}
+                      className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                        addedToList.has(recipe.id)
+                          ? "bg-primary-light text-primary"
+                          : "bg-primary text-white hover:bg-primary-hover"
+                      }`}>
+                      {addedToList.has(recipe.id) ? "Ajouté !" : "+ Liste"}
+                    </button>
                     <button onClick={(e) => { e.stopPropagation(); editRecipe(recipe); }}
                       className="text-xs text-muted hover:text-foreground px-2 py-1">Modifier</button>
                     <button onClick={(e) => { e.stopPropagation(); deleteRecipe(recipe.id); }}
@@ -482,14 +524,21 @@ export default function RecettesPage() {
                       </h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                         {recipe.ingredients.map((ing, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm py-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                          <button
+                            key={i}
+                            onClick={() => addOneToList(ing)}
+                            className="flex items-center gap-2 text-sm py-1.5 px-2 rounded-lg hover:bg-primary-light transition-colors text-left group"
+                            title="Ajouter à ma liste"
+                          >
+                            <span className="w-5 h-5 rounded-full border border-border group-hover:border-primary group-hover:bg-primary group-hover:text-white flex items-center justify-center text-xs shrink-0 transition-colors">
+                              +
+                            </span>
                             <span className="font-medium">
                               {ing.quantity && `${ing.quantity}`}
                               {ing.unit && ` ${ing.unit}`}
                             </span>
                             <span>{ing.name}</span>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>

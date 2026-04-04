@@ -1287,6 +1287,15 @@ async function migrate() {
       added_at TEXT DEFAULT CURRENT_TIMESTAMP,
       expires_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS food_preferences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+      product_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   console.log("Tables created successfully!");
@@ -1430,6 +1439,143 @@ async function migrate() {
     console.log(`${RECIPES.length} detailed recipes seeded with ingredients linked to products!`);
   } else {
     console.log(`${existingCount} recipes already exist with details, skipping seed.`);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // EXPANSION: Add ~100 more products to reach 250+ (idempotent)
+  // ══════════════════════════════════════════════════════════════════════
+  const expansionCheck = await client.execute("SELECT COUNT(*) as count FROM products");
+  const currentProductCount = Number(expansionCheck.rows[0].count);
+
+  if (currentProductCount > 200) {
+    console.log(`Product catalog already expanded (${currentProductCount} products), skipping.`);
+  } else {
+    console.log(`Expanding product catalog from ${currentProductCount} products...`);
+
+    const expansionProducts: { sql: string; args: (string | number)[] }[] = [
+      // ── Fruits & Légumes (+15) ── sort_order starts at 34 (existing goes up to ~33)
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Raisin", "Fruits & Légumes", "kg", "🍇", 34] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Pêches", "Fruits & Légumes", "kg", "🍑", 35] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Nectarines", "Fruits & Légumes", "kg", "🍑", 36] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Abricots", "Fruits & Légumes", "kg", "🍑", 37] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Poires", "Fruits & Légumes", "kg", "🍐", 38] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Kiwis", "Fruits & Légumes", "pcs", "🥝", 39] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Clémentines", "Fruits & Légumes", "kg", "🍊", 40] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Cerises", "Fruits & Légumes", "g", "🍒", 41] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Melon", "Fruits & Légumes", "pcs", "🍈", 42] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Pastèque", "Fruits & Légumes", "pcs", "🍉", 43] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Betterave", "Fruits & Légumes", "pcs", "🟣", 44] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Céleri-rave", "Fruits & Légumes", "pcs", "🥬", 45] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Fenouil", "Fruits & Légumes", "pcs", "🌿", 46] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Artichaut", "Fruits & Légumes", "pcs", "🌿", 47] },
+
+      // ── Viandes & Poissons (+10) ── sort_order starts at 17
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Escalope de veau", "Viandes & Poissons", "g", "🥩", 17] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Rôti de porc", "Viandes & Poissons", "g", "🥩", 18] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Filet mignon", "Viandes & Poissons", "g", "🥩", 19] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Canard (magret)", "Viandes & Poissons", "g", "🦆", 20] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Lapin", "Viandes & Poissons", "g", "🐇", 21] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Boudin", "Viandes & Poissons", "pcs", "🌭", 22] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Sardines fraîches", "Viandes & Poissons", "g", "🐟", 23] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Moules", "Viandes & Poissons", "kg", "🦪", 24] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Truite", "Viandes & Poissons", "g", "🐟", 25] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Côtelettes d'agneau", "Viandes & Poissons", "g", "🍖", 26] },
+
+      // ── Produits laitiers (+10) ── sort_order starts at 17
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Petit-suisse", "Produits laitiers", "lot", "🥛", 17] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Crème dessert", "Produits laitiers", "lot", "🍮", 18] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Lait concentré", "Produits laitiers", "boîte", "🥛", 19] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Gruyère", "Produits laitiers", "g", "🧀", 20] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Emmental", "Produits laitiers", "g", "🧀", 21] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Roquefort", "Produits laitiers", "g", "🧀", 22] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Brie", "Produits laitiers", "pcs", "🧀", 23] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Feta", "Produits laitiers", "g", "🧀", 24] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Crème de marrons", "Produits laitiers", "boîte", "🌰", 25] },
+
+      // ── Boulangerie (+5) ── sort_order starts at 11
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Pain aux céréales", "Boulangerie", "pcs", "🍞", 11] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Naan", "Boulangerie", "lot", "🫓", 12] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Crackers", "Boulangerie", "pcs", "🍘", 13] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Blinis", "Boulangerie", "lot", "🥞", 14] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Madeleines", "Boulangerie", "lot", "🧁", 15] },
+
+      // ── Épicerie (+15) ── sort_order starts at 31
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Céréales petit-déj", "Épicerie", "g", "🥣", 31] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Corn flakes", "Épicerie", "g", "🥣", 32] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Muesli", "Épicerie", "g", "🥣", 33] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Biscuits", "Épicerie", "pcs", "🍪", 34] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Gâteaux apéro", "Épicerie", "pcs", "🥨", 35] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Chips", "Épicerie", "g", "🥔", 36] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Cacahuètes", "Épicerie", "g", "🥜", 37] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Noix de cajou", "Épicerie", "g", "🥜", 38] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Amandes", "Épicerie", "g", "🥜", 39] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Raisins secs", "Épicerie", "g", "🍇", 40] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Couscous", "Épicerie", "g", "🌾", 41] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Boulgour", "Épicerie", "g", "🌾", 42] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Nouilles instantanées", "Épicerie", "pcs", "🍜", 43] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Purée en flocons", "Épicerie", "g", "🥔", 44] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Compote", "Épicerie", "pcs", "🍎", 45] },
+
+      // ── Surgelés (+8) ── sort_order starts at 9
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Cordons bleus", "Surgelés", "pcs", "🍗", 9] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Bûche glacée", "Surgelés", "pcs", "🍰", 10] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Crêpes surgelées", "Surgelés", "lot", "🥞", 11] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Steak haché surgelé", "Surgelés", "pcs", "🥩", 12] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Croquettes", "Surgelés", "g", "🟤", 13] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Pommes noisettes", "Surgelés", "g", "🟤", 14] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Gambas surgelées", "Surgelés", "g", "🦐", 15] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Petits pois surgelés", "Surgelés", "g", "🫛", 16] },
+
+      // ── Boissons (+10) ── sort_order starts at 11
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Limonade", "Boissons", "L", "🍋", 11] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Thé glacé", "Boissons", "L", "🧊", 12] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Energy drink", "Boissons", "pcs", "⚡", 13] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Cidre", "Boissons", "bout.", "🍏", 14] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Champagne", "Boissons", "bout.", "🥂", 15] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Rosé", "Boissons", "bout.", "🍷", 16] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Jus de pomme", "Boissons", "L", "🍎", 17] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Jus multi-fruits", "Boissons", "L", "🧃", 18] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Lait d'avoine", "Boissons", "L", "🥛", 19] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Chocolat chaud (poudre)", "Boissons", "g", "🍫", 20] },
+
+      // ── Hygiène & Beauté (+8) ── sort_order starts at 16
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Fil dentaire", "Hygiène & Beauté", "pcs", "🦷", 16] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Bain de bouche", "Hygiène & Beauté", "pcs", "💧", 17] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Crème solaire", "Hygiène & Beauté", "pcs", "☀️", 18] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Démaquillant", "Hygiène & Beauté", "pcs", "🧴", 19] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Coupe-ongles", "Hygiène & Beauté", "pcs", "💅", 20] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Après-shampoing", "Hygiène & Beauté", "pcs", "🧴", 21] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Protections urinaires", "Hygiène & Beauté", "lot", "🩹", 22] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Sérum physiologique", "Hygiène & Beauté", "lot", "💧", 23] },
+
+      // ── Entretien & Maison (+8) ── sort_order starts at 16
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Détachant", "Entretien & Maison", "pcs", "🧴", 16] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Nettoyant sol", "Entretien & Maison", "L", "🧹", 17] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Insecticide", "Entretien & Maison", "pcs", "🪲", 18] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Piles", "Entretien & Maison", "lot", "🔋", 19] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Ampoules", "Entretien & Maison", "pcs", "💡", 20] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Allumettes", "Entretien & Maison", "boîte", "🔥", 21] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Bougies", "Entretien & Maison", "pcs", "🕯️", 22] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Cire/polish", "Entretien & Maison", "pcs", "✨", 23] },
+
+      // ── Épices & Condiments (+10) ── sort_order starts at 15
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Gingembre moulu", "Épices & Condiments", "pot", "🫚", 15] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Muscade", "Épices & Condiments", "pot", "🟤", 16] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Safran", "Épices & Condiments", "pot", "🟡", 17] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Origan", "Épices & Condiments", "pot", "🌿", 18] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Thym sec", "Épices & Condiments", "pot", "🌿", 19] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Romarin sec", "Épices & Condiments", "pot", "🌿", 20] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Sauce Worcestershire", "Épices & Condiments", "bout.", "🍶", 21] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Vinaigre de cidre", "Épices & Condiments", "bout.", "🍶", 22] },
+      { sql: "INSERT OR IGNORE INTO products (name, category, default_unit, icon, is_custom, sort_order) VALUES (?, ?, ?, ?, 0, ?)", args: ["Tabasco", "Épices & Condiments", "flacon", "🌶️", 23] },
+    ];
+
+    for (const stmt of expansionProducts) {
+      await client.execute(stmt);
+    }
+
+    const finalCount = await client.execute("SELECT COUNT(*) as count FROM products");
+    console.log(`Product catalog expanded! Now ${Number(finalCount.rows[0].count)} products.`);
   }
 }
 

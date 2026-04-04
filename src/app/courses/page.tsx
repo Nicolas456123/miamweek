@@ -32,13 +32,19 @@ export default function CoursesPage() {
     fetchItems();
   }, []);
 
-  const toggleItem = async (id: number, checked: boolean) => {
-    await fetch("/api/list", {
+  const toggleItem = (id: number, checked: boolean) => {
+    // Optimistic update - instant visual feedback
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, checked: !checked ? 1 : 0 } : item
+      )
+    );
+    // Sync with server in background
+    fetch("/api/list", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, checked: !checked }),
-    });
-    fetchItems();
+    }).catch(() => fetchItems()); // revert on error
   };
 
   const addQuickItem = async () => {
@@ -72,10 +78,7 @@ export default function CoursesPage() {
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(item);
     }
-    // Sort: unchecked first within each category
-    for (const cat of Object.keys(groups)) {
-      groups[cat].sort((a, b) => Number(a.checked) - Number(b.checked));
-    }
+    // Keep original order - no sorting to avoid items jumping when checked
     return groups;
   }, [items]);
 

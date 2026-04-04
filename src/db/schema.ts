@@ -8,6 +8,11 @@ export const recipes = sqliteTable("recipes", {
   description: text("description"),
   servings: integer("servings").default(2),
   category: text("category"),
+  prepTime: integer("prep_time"), // minutes
+  cookTime: integer("cook_time"), // minutes
+  difficulty: text("difficulty"), // "facile" | "moyen" | "difficile"
+  utensils: text("utensils"), // JSON array: ["poêle", "casserole"]
+  steps: text("steps"), // JSON array: ["Étape 1...", "Étape 2..."]
   createdAt: text("created_at").default("CURRENT_TIMESTAMP"),
 });
 
@@ -16,6 +21,9 @@ export const recipeIngredients = sqliteTable("recipe_ingredients", {
   recipeId: integer("recipe_id")
     .notNull()
     .references(() => recipes.id, { onDelete: "cascade" }),
+  productId: integer("product_id").references(() => products.id, {
+    onDelete: "set null",
+  }),
   name: text("name").notNull(),
   quantity: real("quantity"),
   unit: text("unit"),
@@ -84,6 +92,22 @@ export const receipts = sqliteTable("receipts", {
   store: text("store"),
   total: real("total"),
   createdAt: text("created_at").default("CURRENT_TIMESTAMP"),
+});
+
+// ── Pantry / Inventaire maison ────────────────────────────────────────
+
+export const pantryItems = sqliteTable("pantry_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  productId: integer("product_id").references(() => products.id, {
+    onDelete: "set null",
+  }),
+  productName: text("product_name").notNull(),
+  quantity: real("quantity"),
+  unit: text("unit"),
+  category: text("category"),
+  location: text("location"), // "frigo" | "placard" | "congélateur" | "autre"
+  addedAt: text("added_at").default("CURRENT_TIMESTAMP"),
+  expiresAt: text("expires_at"),
 });
 
 // ── Price history ─────────────────────────────────────────────────────

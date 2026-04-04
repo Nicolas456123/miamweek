@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { PRODUCT_CATEGORIES } from "@/lib/utils";
+import { CategoryIcon } from "@/components/category-icons";
 
 type Product = {
   id: number;
@@ -180,12 +181,13 @@ export default function ListePage() {
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                   activeCategory === cat
                     ? "bg-primary text-white"
                     : "bg-card border border-border text-muted hover:text-foreground"
                 }`}
               >
+                <CategoryIcon category={cat} size={14} />
                 {cat}
               </button>
             ))}
@@ -287,7 +289,8 @@ export default function ListePage() {
                   .sort(([a], [b]) => a.localeCompare(b))
                   .map(([category, items]) => (
                     <div key={category}>
-                      <p className="text-xs font-semibold text-muted mt-2 mb-1">
+                      <p className="text-xs font-semibold text-muted mt-2 mb-1 flex items-center gap-1">
+                        <CategoryIcon category={category} size={12} />
                         {category}
                       </p>
                       {items.map((item) => (

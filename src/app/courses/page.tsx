@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { CategoryIcon } from "@/components/category-icons";
 
 type ListItem = {
   id: number;
@@ -186,9 +187,10 @@ export default function CoursesPage() {
               className="bg-card border border-border rounded-xl overflow-hidden"
             >
               <div className="px-4 py-2 bg-card-hover border-b border-border">
-                <h3 className="text-sm font-semibold text-foreground">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <CategoryIcon category={category} size={16} />
                   {category}
-                  <span className="text-muted font-normal ml-2">
+                  <span className="text-muted font-normal">
                     {categoryItems.filter((i) => i.checked).length}/
                     {categoryItems.length}
                   </span>

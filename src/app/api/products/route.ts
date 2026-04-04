@@ -2,6 +2,8 @@ import { db } from "@/db";
 import { products } from "@/db/schema";
 import { asc } from "drizzle-orm";
 
+export const runtime = "nodejs";
+
 export async function GET() {
   try {
     const allProducts = await db

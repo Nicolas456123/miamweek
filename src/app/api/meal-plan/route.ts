@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { mealPlan } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   try {
     const weekStart = request.nextUrl.searchParams.get("weekStart");

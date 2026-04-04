@@ -3,6 +3,8 @@ import { stockItems } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createClient } from "@libsql/client";
 
+export const runtime = "nodejs";
+
 export async function GET() {
   const client = createClient({
     url: process.env.TURSO_DATABASE_URL!,

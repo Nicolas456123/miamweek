@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { recipes, recipeIngredients } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+export const runtime = "nodejs";
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

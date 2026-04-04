@@ -2,6 +2,8 @@ import { db } from "@/db";
 import { listItems, stockItems } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
+export const runtime = "nodejs";
+
 export async function POST() {
   // Get all active items
   const activeItems = await db

@@ -2,6 +2,8 @@ import { db } from "@/db";
 import { listItems } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+export const runtime = "nodejs";
+
 export async function POST() {
   await db
     .update(listItems)

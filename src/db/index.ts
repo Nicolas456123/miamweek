@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/libsql";
-import { createClient } from "@libsql/client/web";
+import { createClient } from "@libsql/client";
 import * as schema from "./schema";
 
 function createDb() {
@@ -12,10 +12,7 @@ function createDb() {
     );
   }
 
-  // Convert libsql:// to https:// for web client
-  const httpUrl = url.replace("libsql://", "https://");
-
-  const client = createClient({ url: httpUrl, authToken });
+  const client = createClient({ url, authToken });
   return drizzle(client, { schema });
 }
 

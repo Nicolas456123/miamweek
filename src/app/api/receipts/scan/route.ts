@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import { receipts, priceHistory } from "@/db/schema";
 
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   const body = await request.json();
   const { text } = body;

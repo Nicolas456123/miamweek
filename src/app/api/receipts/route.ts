@@ -2,6 +2,8 @@ import { db } from "@/db";
 import { receipts, priceHistory } from "@/db/schema";
 import { desc } from "drizzle-orm";
 
+export const runtime = "nodejs";
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");

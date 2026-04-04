@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 
+export const runtime = "nodejs";
+
 const MOCK_RECIPES = [
   {
     name: "Poulet rôti aux herbes",

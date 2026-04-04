@@ -172,7 +172,26 @@ export default function RecettesPage() {
   };
 
   const addAllToList = async (recipe: Recipe) => {
+    // Get inventory to filter out what we already have
+    let inventoryNames: string[] = [];
+    try {
+      const invRes = await fetch("/api/stock");
+      const invData = await invRes.json();
+      if (Array.isArray(invData)) {
+        inventoryNames = invData
+          .filter((s: { status: string }) => s.status === "ok")
+          .map((s: { product_name: string }) => s.product_name?.toLowerCase())
+          .filter(Boolean);
+      }
+    } catch { /* ignore */ }
+
+    let skipped = 0;
     for (const ing of recipe.ingredients) {
+      // Skip if already in inventory with status "ok"
+      if (inventoryNames.includes(ing.name.toLowerCase())) {
+        skipped++;
+        continue;
+      }
       await fetch("/api/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -183,13 +202,17 @@ export default function RecettesPage() {
           category: ing.category || "Autre",
           source: "recipe",
           listStatus: "prep",
+          sourceRecipe: recipe.name,
         }),
       });
     }
     setAddedToList((prev) => new Set(prev).add(recipe.id));
+    if (skipped > 0) {
+      alert(`${recipe.ingredients.length - skipped} ingrédients ajoutés à la liste.\n${skipped} déjà en stock (ignorés).`);
+    }
   };
 
-  const addOneToList = async (ing: Ingredient) => {
+  const addOneToList = async (ing: Ingredient, recipeName?: string) => {
     await fetch("/api/list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -200,6 +223,7 @@ export default function RecettesPage() {
         category: ing.category || "Autre",
         source: "recipe",
         listStatus: "prep",
+        sourceRecipe: recipeName || null,
       }),
     });
   };
@@ -526,7 +550,7 @@ export default function RecettesPage() {
                         {recipe.ingredients.map((ing, i) => (
                           <button
                             key={i}
-                            onClick={() => addOneToList(ing)}
+                            onClick={() => addOneToList(ing, recipe.name)}
                             className="flex items-center gap-2 text-sm py-1.5 px-2 rounded-lg hover:bg-primary-light transition-colors text-left group"
                             title="Ajouter à ma liste"
                           >

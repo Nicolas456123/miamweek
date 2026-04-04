@@ -20,14 +20,17 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { productId, productName, quantity, unit, category, source, listStatus } = body;
+  const { productId, productName, quantity, unit, category, source, listStatus, sourceRecipe } = body;
 
   if (!productName) {
     return Response.json({ error: "productName is required" }, { status: 400 });
   }
 
+  // Add source_recipe column if it doesn't exist yet
+  try { await query("ALTER TABLE list_items ADD COLUMN source_recipe TEXT"); } catch { /* already exists */ }
+
   const result = await query(
-    "INSERT INTO list_items (product_id, product_name, quantity, unit, category, source, list_status) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *",
+    "INSERT INTO list_items (product_id, product_name, quantity, unit, category, source, list_status, source_recipe) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
     [
       productId || null,
       productName,
@@ -36,6 +39,7 @@ export async function POST(request: Request) {
       category || null,
       source || "manual",
       listStatus || "prep",
+      sourceRecipe || null,
     ]
   );
 

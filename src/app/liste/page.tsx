@@ -22,6 +22,7 @@ type ListItem = {
   checked: boolean | number;
   source: string;
   list_status: string;
+  source_recipe: string | null;
 };
 
 export default function ListePage() {
@@ -509,11 +510,18 @@ function ListContent({
             {items.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center gap-2 py-1.5 group"
+                className={`flex items-center gap-2 py-1.5 group ${
+                  item.source === "recipe" ? "border-l-2 border-orange-400 pl-2" : ""
+                }`}
               >
-                <span className="text-sm flex-1 truncate">
-                  {item.product_name}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm truncate block">{item.product_name}</span>
+                  {item.source_recipe && (
+                    <span className="text-[10px] text-orange-500 truncate block">
+                      {item.source_recipe}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() =>

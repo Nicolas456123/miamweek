@@ -14,6 +14,7 @@ type ListItem = {
   checked: boolean | number;
   source: string;
   list_status: string;
+  source_recipe: string | null;
 };
 
 export default function CoursesPage() {
@@ -223,18 +224,24 @@ export default function CoursesPage() {
                         </svg>
                       )}
                     </div>
-                    <span
-                      className={`flex-1 text-sm ${
-                        !!item.checked
-                          ? "line-through text-muted"
-                          : "text-foreground"
-                      }`}
-                    >
-                      {item.product_name}
-                    </span>
+                    <div className={`flex-1 min-w-0 ${
+                      !!item.checked ? "line-through opacity-50" : ""
+                    }`}>
+                      <span className="text-sm block truncate">{item.product_name}</span>
+                      {item.source_recipe && (
+                        <span className="text-[10px] text-orange-500 block truncate">
+                          {item.source_recipe}
+                        </span>
+                      )}
+                    </div>
                     {item.quantity && (
-                      <span className="text-xs text-muted">
+                      <span className="text-xs text-muted shrink-0">
                         {item.quantity} {item.unit}
+                      </span>
+                    )}
+                    {item.source === "recipe" && !item.source_recipe && (
+                      <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded shrink-0">
+                        recette
                       </span>
                     )}
                   </button>

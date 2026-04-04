@@ -27,6 +27,13 @@ type MealEntry = {
 
 type ViewMode = "today" | "week" | "next";
 
+type DayConfig = {
+  mode: "cook" | "skip" | "out"; // cook=normal, skip=pas de cuisine, out=resto/dehors
+  persons: number;
+};
+
+const DEFAULT_DAY: DayConfig = { mode: "cook", persons: 2 };
+
 export default function PlanningPage() {
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -38,6 +45,24 @@ export default function PlanningPage() {
   } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [customName, setCustomName] = useState("");
+  const [dayConfigs, setDayConfigs] = useState<Record<number, DayConfig>>({});
+  const [autoFilling, setAutoFilling] = useState(false);
+
+  const getDayConfig = (day: number): DayConfig => dayConfigs[day] || DEFAULT_DAY;
+
+  const setDayMode = (day: number, mode: "cook" | "skip" | "out") => {
+    setDayConfigs((prev) => ({
+      ...prev,
+      [day]: { ...getDayConfig(day), mode },
+    }));
+  };
+
+  const setDayPersons = (day: number, persons: number) => {
+    setDayConfigs((prev) => ({
+      ...prev,
+      [day]: { ...getDayConfig(day), persons: Math.max(1, persons) },
+    }));
+  };
 
   const currentMonday = useMemo(() => {
     const d = new Date();
@@ -128,6 +153,66 @@ export default function PlanningPage() {
     );
   };
 
+  const autoFillWeek = async () => {
+    setAutoFilling(true);
+    try {
+      // Build context about each day
+      const dayDescriptions = DAYS.map((name, i) => {
+        const config = getDayConfig(i);
+        const existing = getMealsForPeriod(i, "lunch").length + getMealsForPeriod(i, "dinner").length;
+        if (config.mode === "skip") return `${name}: pas de cuisine`;
+        if (config.mode === "out") return `${name}: restaurant/dehors`;
+        return `${name}: cuisine pour ${config.persons} personne(s)${existing > 0 ? ` (${existing} repas déjà planifiés)` : ""}`;
+      }).join("\n");
+
+      // Get available recipes
+      const recipeNames = recipes.map((r) => `${r.name} (${r.category || "?"}, ${r.servings} pers.)`).join(", ");
+
+      const res = await fetch("/api/ai/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `Complète ce planning de repas pour la semaine. Voici le contexte de chaque jour :\n${dayDescriptions}\n\nRecettes disponibles : ${recipeNames}\n\nPour chaque jour où il faut cuisiner et où il n'y a pas encore de repas, propose un plat pour le midi et un pour le soir. Varie les recettes, équilibre les types de cuisine. Réponds UNIQUEMENT en JSON :\n[{"dayOfWeek": 0, "mealType": "lunch_plat", "name": "Nom du plat"}, ...]`,
+        }),
+      });
+      const data = await res.json();
+      const suggestions = data.meals || data.recipes || data.suggestions;
+
+      if (Array.isArray(suggestions)) {
+        for (const meal of suggestions) {
+          const config = getDayConfig(meal.dayOfWeek);
+          if (config.mode !== "cook") continue;
+          // Check if slot already has a meal
+          const existing = meals.filter(
+            (m) => m.day_of_week === meal.dayOfWeek && m.meal_type === meal.mealType
+          );
+          if (existing.length > 0) continue;
+
+          // Try to match with a real recipe
+          const matchedRecipe = recipes.find(
+            (r) => r.name.toLowerCase() === (meal.name || "").toLowerCase()
+          );
+
+          await fetch("/api/meal-plan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              weekStart: currentMonday,
+              dayOfWeek: meal.dayOfWeek,
+              mealType: meal.mealType || "dinner_plat",
+              recipeId: matchedRecipe?.id || null,
+              customName: meal.name,
+            }),
+          });
+        }
+        fetchMeals();
+      }
+    } catch (err) {
+      console.error("Auto-fill error:", err);
+    }
+    setAutoFilling(false);
+  };
+
   const getMealsForSlot = (day: number, type: string) =>
     meals.filter(
       (m) => m.day_of_week === day && m.meal_type === type
@@ -208,6 +293,13 @@ export default function PlanningPage() {
           >
             🍽️ Composer un menu
           </Link>
+          <button
+            onClick={autoFillWeek}
+            disabled={autoFilling}
+            className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors"
+          >
+            {autoFilling ? "Génération..." : "✨ Auto-remplir"}
+          </button>
           {filledSlots > 0 && (
             <button
               onClick={addWeekToList}
@@ -304,31 +396,82 @@ export default function PlanningPage() {
               }`}
             >
               {/* Day header */}
-              <div
-                className={`px-4 py-2 flex items-center justify-between ${
-                  isToday ? "bg-primary-light" : "bg-card-hover"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-sm font-bold ${
-                      isToday ? "text-primary" : "text-foreground"
+              {(() => {
+                const config = getDayConfig(dayIndex);
+                return (
+                  <div
+                    className={`px-4 py-2 flex items-center justify-between gap-2 ${
+                      isToday ? "bg-primary-light" : config.mode !== "cook" ? "bg-gray-100" : "bg-card-hover"
                     }`}
                   >
-                    {DAYS[dayIndex]}
-                  </span>
-                  <span className="text-xs text-muted">
-                    {getDayDate(dayIndex)}
-                  </span>
-                  {isToday && (
-                    <span className="text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">
-                      Aujourd&apos;hui
-                    </span>
-                  )}
-                </div>
-              </div>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`text-sm font-bold shrink-0 ${isToday ? "text-primary" : "text-foreground"}`}>
+                        {DAYS[dayIndex]}
+                      </span>
+                      <span className="text-xs text-muted shrink-0">{getDayDate(dayIndex)}</span>
+                      {isToday && (
+                        <span className="text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium shrink-0">
+                          Aujourd&apos;hui
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Mode buttons */}
+                      {([
+                        { mode: "cook" as const, icon: "👨‍🍳", tip: "Cuisine" },
+                        { mode: "skip" as const, icon: "🚫", tip: "Pas de cuisine" },
+                        { mode: "out" as const, icon: "🍽️", tip: "Resto/dehors" },
+                      ]).map((m) => (
+                        <button
+                          key={m.mode}
+                          title={m.tip}
+                          onClick={() => setDayMode(dayIndex, m.mode)}
+                          className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center transition-colors ${
+                            config.mode === m.mode
+                              ? "bg-primary text-white"
+                              : "bg-card border border-border text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {m.icon}
+                        </button>
+                      ))}
+                      {/* Persons */}
+                      {config.mode === "cook" && (
+                        <div className="flex items-center gap-0.5 ml-1 bg-card border border-border rounded-lg px-1">
+                          <button
+                            onClick={() => setDayPersons(dayIndex, config.persons - 1)}
+                            className="w-5 h-5 text-xs font-bold text-muted hover:text-foreground"
+                          >
+                            -
+                          </button>
+                          <span className="text-xs font-semibold w-4 text-center">{config.persons}</span>
+                          <button
+                            onClick={() => setDayPersons(dayIndex, config.persons + 1)}
+                            className="w-5 h-5 text-xs font-bold text-muted hover:text-foreground"
+                          >
+                            +
+                          </button>
+                          <span className="text-[10px] text-muted">p.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
-              {/* Meal slots */}
+              {/* Day content */}
+              {getDayConfig(dayIndex).mode === "skip" ? (
+                <div className="px-4 py-4 text-center text-sm text-muted italic bg-gray-50">
+                  Pas de cuisine ce jour
+                </div>
+              ) : getDayConfig(dayIndex).mode === "out" ? (
+                <div className="px-4 py-4 text-center text-sm text-muted italic bg-gray-50">
+                  🍽️ Restaurant / dehors
+                </div>
+              ) : null}
+
+              {/* Meal slots (only if cooking) */}
+              {getDayConfig(dayIndex).mode === "cook" && (
               <div className="grid grid-cols-2 divide-x divide-border">
                 {(["lunch", "dinner"] as const).map((mealType) => {
                   const periodMeals = getMealsForPeriod(dayIndex, mealType);
@@ -455,6 +598,7 @@ export default function PlanningPage() {
                   );
                 })}
               </div>
+              )}
             </div>
           );
         })}

@@ -1,5 +1,4 @@
 import { drizzle } from "drizzle-orm/libsql/web";
-import { createClient } from "@libsql/client/web";
 import * as schema from "./schema";
 
 function createDb() {
@@ -7,13 +6,11 @@ function createDb() {
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
   if (!url || !authToken) {
-    throw new Error(
-      `Missing database credentials: url=${url ? "set" : "missing"}, token=${authToken ? "set" : "missing"}`
-    );
+    throw new Error("Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN");
   }
 
-  const client = createClient({ url, authToken });
-  return drizzle(client, { schema });
+  // Use drizzle's built-in connection string support
+  return drizzle({ connection: { url, authToken }, schema });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

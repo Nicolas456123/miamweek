@@ -9,6 +9,7 @@ const links = [
   { href: "/liste", label: "Ma liste", icon: "list" },
   { href: "/courses", label: "Courses", icon: "cart" },
   { href: "/recettes", label: "Recettes", icon: "book" },
+  { href: "/inventaire", label: "Inventaire", icon: "pantry" },
   { href: "/suivi", label: "Suivi", icon: "chart" },
 ];
 
@@ -31,6 +32,11 @@ const icons: Record<string, React.ReactNode> = {
   book: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+    </svg>
+  ),
+  pantry: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>
     </svg>
   ),
   chart: (

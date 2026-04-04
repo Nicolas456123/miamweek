@@ -26,6 +26,13 @@ const quickLinks = [
     color: "bg-warning-light text-warning",
   },
   {
+    href: "/inventaire",
+    title: "Mon inventaire",
+    description: "Voir ce que j'ai chez moi en un coup d'oeil",
+    icon: "📦",
+    color: "bg-purple-50 text-purple-600",
+  },
+  {
     href: "/suivi",
     title: "Suivi & Stats",
     description: "Prix, dépenses, consommation",

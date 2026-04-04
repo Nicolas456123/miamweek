@@ -33,6 +33,7 @@ export default function ListePage() {
   const [customQty, setCustomQty] = useState("");
   const [customUnit, setCustomUnit] = useState("pcs");
   const [showCustom, setShowCustom] = useState(false);
+  const [showMobileList, setShowMobileList] = useState(false);
 
   useEffect(() => {
     fetch("/api/products")
@@ -351,106 +352,210 @@ export default function ListePage() {
           )}
         </div>
 
-        {/* Right: Current list */}
-        <div>
-          <div className={`rounded-xl p-4 sticky top-20 transition-colors ${
-            listItems.length > 0
-              ? "bg-card border-2 border-primary/30 shadow-md"
-              : "bg-card border border-border"
-          }`}>
-            <div className={`flex items-center justify-between mb-3 ${
-              listItems.length > 0 ? "pb-3 border-b border-border" : ""
-            }`}>
-              <h2 className="font-semibold flex items-center gap-2">
-                Ma liste
-                <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                  listItems.length > 0
-                    ? "bg-primary text-white"
-                    : "bg-primary-light text-primary"
-                }`}>
-                  {listItems.length}
-                </span>
-              </h2>
-            </div>
-
-            {listItems.length === 0 ? (
-              <p className="text-sm text-muted text-center py-6">
-                Clique sur les produits pour les ajouter
-              </p>
-            ) : (
-              <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                {Object.entries(groupedList)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([category, items]) => (
-                    <div key={category}>
-                      <p className="text-xs font-semibold text-muted mt-2 mb-1 flex items-center gap-1">
-                        <CategoryIcon category={category} size={12} />
-                        {category}
-                      </p>
-                      {items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center gap-2 py-1.5 group"
-                        >
-                          <span className="text-sm flex-1 truncate">
-                            {item.product_name}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() =>
-                                updateQuantity(
-                                  item.id,
-                                  (item.quantity || 1) - 1
-                                )
-                              }
-                              className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger"
-                            >
-                              -
-                            </button>
-                            <span className="text-xs w-8 text-center font-medium">
-                              {item.quantity || 1}
-                            </span>
-                            <button
-                              onClick={() =>
-                                updateQuantity(
-                                  item.id,
-                                  (item.quantity || 1) + 1
-                                )
-                              }
-                              className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-primary-light hover:text-primary"
-                            >
-                              +
-                            </button>
-                          </div>
-                          <span className="text-xs text-muted w-6">
-                            {item.unit}
-                          </span>
-                          <button
-                            onClick={() => removeItem(item.id)}
-                            className="text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-              </div>
-            )}
-
-            {listItems.length > 0 && (
-              <button
-                onClick={validateList}
-                className="mt-4 w-full py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
-              >
-                Partir en courses
-              </button>
-            )}
-          </div>
+        {/* Right: Current list - Desktop sidebar */}
+        <div className="hidden lg:block">
+          <ListPanel
+            listItems={listItems}
+            groupedList={groupedList}
+            updateQuantity={updateQuantity}
+            removeItem={removeItem}
+            validateList={validateList}
+          />
         </div>
       </div>
+
+      {/* Mobile: floating button + bottom drawer */}
+      {listItems.length > 0 && (
+        <>
+          {/* Floating button */}
+          <button
+            onClick={() => setShowMobileList(true)}
+            className="lg:hidden fixed bottom-6 right-6 z-40 bg-primary text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-hover transition-colors"
+          >
+            <span className="text-lg font-bold">{listItems.length}</span>
+          </button>
+
+          {/* Drawer overlay */}
+          {showMobileList && (
+            <div className="lg:hidden fixed inset-0 z-50">
+              <div
+                className="absolute inset-0 bg-black/40"
+                onClick={() => setShowMobileList(false)}
+              />
+              <div className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl max-h-[80vh] overflow-y-auto shadow-2xl">
+                <div className="sticky top-0 bg-background px-4 pt-3 pb-2 border-b border-border flex items-center justify-between">
+                  <h2 className="font-semibold flex items-center gap-2">
+                    Ma liste
+                    <span className="text-xs bg-primary text-white px-2.5 py-0.5 rounded-full font-bold">
+                      {listItems.length}
+                    </span>
+                  </h2>
+                  <button
+                    onClick={() => setShowMobileList(false)}
+                    className="text-muted p-1"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+                <div className="p-4">
+                  <ListContent
+                    groupedList={groupedList}
+                    updateQuantity={updateQuantity}
+                    removeItem={removeItem}
+                  />
+                  <button
+                    onClick={() => {
+                      setShowMobileList(false);
+                      validateList();
+                    }}
+                    className="mt-4 w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
+                  >
+                    Partir en courses
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ListPanel({
+  listItems,
+  groupedList,
+  updateQuantity,
+  removeItem,
+  validateList,
+}: {
+  listItems: ListItem[];
+  groupedList: Record<string, ListItem[]>;
+  updateQuantity: (id: number, qty: number) => void;
+  removeItem: (id: number) => void;
+  validateList: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-xl p-4 sticky top-20 transition-colors ${
+        listItems.length > 0
+          ? "bg-card border-2 border-primary/30 shadow-md"
+          : "bg-card border border-border"
+      }`}
+    >
+      <div
+        className={`flex items-center justify-between mb-3 ${
+          listItems.length > 0 ? "pb-3 border-b border-border" : ""
+        }`}
+      >
+        <h2 className="font-semibold flex items-center gap-2">
+          Ma liste
+          <span
+            className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+              listItems.length > 0
+                ? "bg-primary text-white"
+                : "bg-primary-light text-primary"
+            }`}
+          >
+            {listItems.length}
+          </span>
+        </h2>
+      </div>
+
+      {listItems.length === 0 ? (
+        <p className="text-sm text-muted text-center py-6">
+          Clique sur les produits pour les ajouter
+        </p>
+      ) : (
+        <>
+          <ListContent
+            groupedList={groupedList}
+            updateQuantity={updateQuantity}
+            removeItem={removeItem}
+          />
+          <button
+            onClick={validateList}
+            className="mt-4 w-full py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
+          >
+            Partir en courses
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ListContent({
+  groupedList,
+  updateQuantity,
+  removeItem,
+}: {
+  groupedList: Record<string, ListItem[]>;
+  updateQuantity: (id: number, qty: number) => void;
+  removeItem: (id: number) => void;
+}) {
+  return (
+    <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+      {Object.entries(groupedList)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([category, items]) => (
+          <div key={category}>
+            <p className="text-xs font-semibold text-muted mt-2 mb-1 flex items-center gap-1">
+              <CategoryIcon category={category} size={12} />
+              {category}
+            </p>
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-2 py-1.5 group"
+              >
+                <span className="text-sm flex-1 truncate">
+                  {item.product_name}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() =>
+                      updateQuantity(item.id, (item.quantity || 1) - 1)
+                    }
+                    className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger"
+                  >
+                    -
+                  </button>
+                  <span className="text-xs w-8 text-center font-medium">
+                    {item.quantity || 1}
+                  </span>
+                  <button
+                    onClick={() =>
+                      updateQuantity(item.id, (item.quantity || 1) + 1)
+                    }
+                    className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-primary-light hover:text-primary"
+                  >
+                    +
+                  </button>
+                </div>
+                <span className="text-xs text-muted w-6">{item.unit}</span>
+                <button
+                  onClick={() => removeItem(item.id)}
+                  className="text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        ))}
     </div>
   );
 }

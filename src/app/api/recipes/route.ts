@@ -34,9 +34,16 @@ export async function POST(request: Request) {
       return Response.json({ error: "Name is required" }, { status: 400 });
     }
 
+    const { prepTime, cookTime, difficulty, utensils, steps } = body;
+
     const recipeResult = await query(
-      "INSERT INTO recipes (name, description, servings, category) VALUES (?, ?, ?, ?) RETURNING *",
-      [name, description || null, servings || null, category || null]
+      "INSERT INTO recipes (name, description, servings, category, prep_time, cook_time, difficulty, utensils, steps) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      [
+        name, description || null, servings || null, category || null,
+        prepTime || null, cookTime || null, difficulty || null,
+        utensils ? JSON.stringify(utensils) : null,
+        steps ? JSON.stringify(steps) : null,
+      ]
     );
     const newRecipe = recipeResult.rows[0];
 

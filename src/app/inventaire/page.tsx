@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useToast } from "@/components/toast";
 import { PRODUCT_CATEGORIES } from "@/lib/utils";
 import { CategoryIcon } from "@/components/category-icons";
 
@@ -35,6 +36,7 @@ const LOCATIONS = [
 ] as const;
 
 export default function InventairePage() {
+  const { toast } = useToast();
   const [items, setItems] = useState<PantryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
@@ -126,7 +128,7 @@ export default function InventairePage() {
         setSmartImage(null);
         setShowSmartAdd(false);
         fetchPantry();
-        alert(`${data.count} produit(s) ajouté(s) à l'inventaire !`);
+        toast(`${data.count} produit(s) ajouté(s) à l'inventaire`);
       }
     } catch (err) {
       console.error(err);
@@ -147,7 +149,7 @@ export default function InventairePage() {
     const W = window as any;
     const SpeechRecognitionCtor = W.webkitSpeechRecognition || W.SpeechRecognition;
     if (!SpeechRecognitionCtor) {
-      alert("La reconnaissance vocale n'est pas supportée par ce navigateur.");
+      toast("Reconnaissance vocale non supportée par ce navigateur", "error");
       return;
     }
     const recognition = new SpeechRecognitionCtor();

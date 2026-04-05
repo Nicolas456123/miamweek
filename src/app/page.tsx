@@ -35,7 +35,7 @@ const quickLinks = [
   {
     href: "/recettes",
     title: "Mes recettes",
-    description: "41 recettes détaillées avec étapes",
+    description: "Toutes tes recettes détaillées avec étapes",
     icon: "📖",
     color: "bg-warning-light text-warning",
   },

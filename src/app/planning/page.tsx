@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getMonday, DAYS, MEAL_TYPES, MEAL_SLOTS } from "@/lib/utils";
+import { useToast } from "@/components/toast";
 
 type Recipe = {
   id: number;
@@ -35,6 +36,7 @@ const DEFAULT_DINNER: MealConfig = { mode: "cook", persons: 2 };
 export default function PlanningPage() {
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const { toast } = useToast();
   const [viewAll, setViewAll] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [addingSlot, setAddingSlot] = useState<{
@@ -197,9 +199,7 @@ export default function PlanningPage() {
         });
       }
     }
-    alert(
-      `Ingrédients de ${recipeMeals.length} recette(s) ajoutés à la liste !`
-    );
+    toast(`${recipeMeals.length} recette(s) ajoutées à la liste`);
   };
 
   const autoFillWeek = async () => {

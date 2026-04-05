@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { CategoryIcon } from "@/components/category-icons";
 import { CategoryFilter, getFilterCategories } from "@/components/category-filter";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
+import { useToast } from "@/components/toast";
 
 type Product = {
   id: number;
@@ -112,6 +113,7 @@ function getStockStatus(
 }
 
 export default function ListePage() {
+  const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [listItems, setListItems] = useState<ListItem[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
@@ -271,12 +273,15 @@ export default function ListePage() {
   };
 
   const clearAllItems = async () => {
+    if (!confirm("Vider toute la liste ?")) return;
+    const count = listItems.length;
     setListItems([]);
     await fetch("/api/list", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ all: true, status: "prep" }),
     });
+    toast(`${count} article${count > 1 ? "s" : ""} supprimé${count > 1 ? "s" : ""}`);
   };
 
   // Smart scan functions
@@ -295,6 +300,7 @@ export default function ListePage() {
       });
       const data = await res.json();
       if (data.count > 0) {
+        toast(`${data.count} produit${data.count > 1 ? "s" : ""} ajouté${data.count > 1 ? "s" : ""}`);
         setSmartResult(`${data.count} produit${data.count > 1 ? "s" : ""} ajouté${data.count > 1 ? "s" : ""}`);
         fetchList();
         setTimeout(() => {
@@ -369,7 +375,7 @@ export default function ListePage() {
 
   const validateList = async () => {
     if (!navigator.onLine) {
-      alert("Tu dois être en ligne pour valider la liste.");
+      toast("Tu dois être en ligne pour valider la liste.", "error");
       return;
     }
     await fetch("/api/list/validate", {

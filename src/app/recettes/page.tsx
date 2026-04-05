@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useToast } from "@/components/toast";
 
 type Ingredient = {
   id?: number;
@@ -37,6 +38,7 @@ const DIFFICULTY_COLORS: Record<string, string> = {
 };
 
 export default function RecettesPage() {
+  const { toast } = useToast();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -208,7 +210,7 @@ export default function RecettesPage() {
     }
     setAddedToList((prev) => new Set(prev).add(recipe.id));
     if (skipped > 0) {
-      alert(`${recipe.ingredients.length - skipped} ingrédients ajoutés à la liste.\n${skipped} déjà en stock (ignorés).`);
+      toast(`${recipe.ingredients.length - skipped} ingrédients ajoutés à la liste${skipped > 0 ? ` (${skipped} en stock)` : ""}`);
     }
   };
 

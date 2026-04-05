@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icons";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
+import { useToast } from "@/components/toast";
 
 type ListItem = {
   id: number;
@@ -19,6 +20,7 @@ type ListItem = {
 };
 
 export default function CoursesPage() {
+  const { toast } = useToast();
   const [items, setItems] = useState<ListItem[]>([]);
   const [quickAdd, setQuickAdd] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -109,7 +111,7 @@ export default function CoursesPage() {
 
   const finishShopping = async () => {
     if (!navigator.onLine) {
-      alert("Tu dois être en ligne pour terminer les courses.");
+      toast("Tu dois être en ligne pour terminer les courses.", "error");
       return;
     }
     const checked = items.filter((i) => !!i.checked).length;
@@ -121,7 +123,7 @@ export default function CoursesPage() {
 
     const res = await fetch("/api/list/finish", { method: "POST" });
     const data = await res.json();
-    alert(`Courses terminées !\n${data.itemsProcessed || 0} produit(s) ajouté(s) à l'inventaire.`);
+    toast(`Courses terminées ! ${data.itemsProcessed || 0} produit(s) ajouté(s) à l'inventaire.`);
     fetchItems();
   };
 

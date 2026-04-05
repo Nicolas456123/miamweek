@@ -122,7 +122,7 @@ export default function SuiviPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto pb-20 md:pb-0">
       <h1 className="text-xl font-bold mb-4">Suivi</h1>
 
       {/* Tabs */}

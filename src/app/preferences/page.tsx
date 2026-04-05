@@ -125,7 +125,7 @@ export default function PreferencesPage() {
   }, [filteredPreferences]);
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto pb-20 md:pb-0">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold">Mes préférences</h1>

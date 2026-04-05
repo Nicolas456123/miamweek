@@ -164,7 +164,7 @@ export default function CoursesPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-xl mx-auto pb-20 md:pb-0">
       {/* Offline banner */}
       {(!isOnline || queueSize > 0) && (
         <div

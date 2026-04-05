@@ -217,7 +217,7 @@ export default function InventairePage() {
     LOCATIONS.find((l) => l.key === loc) || { label: loc, icon: "📦" };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto pb-20 md:pb-0">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold">Mon inventaire</h1>

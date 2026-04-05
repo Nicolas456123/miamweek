@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
+import { getMonday } from "@/lib/utils";
 
 const quickLinks = [
   {
@@ -107,21 +109,68 @@ const shortcuts = [
   },
 ];
 
+type TodayMeal = { meal_type: string; custom_name: string | null; recipe_id: number | null };
+
 export default function HomePage() {
+  const [todayMeals, setTodayMeals] = useState<TodayMeal[]>([]);
+
+  useEffect(() => {
+    const today = new Date();
+    const dow = today.getDay();
+    const dayOfWeek = dow === 0 ? 6 : dow - 1;
+    const weekStart = getMonday(today);
+    fetch(`/api/meal-plan?weekStart=${weekStart}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setTodayMeals(data.filter((m: TodayMeal & { day_of_week: number }) => m.day_of_week === dayOfWeek));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const dinnerMeals = todayMeals.filter((m) => m.meal_type === "dinner" || m.meal_type.startsWith("dinner_"));
+  const lunchMeals = todayMeals.filter((m) => m.meal_type === "lunch" || m.meal_type.startsWith("lunch_"));
+
   return (
     <div className="max-w-2xl mx-auto pb-20 md:pb-0">
       {/* Hero */}
-      <div className="text-center py-8">
-        <div className="flex justify-center mb-4">
-          <Logo size={64} />
+      <div className="text-center py-6">
+        <div className="flex justify-center mb-3">
+          <Logo size={56} />
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">
-          Bienvenue sur MiamWeek
+        <h1 className="text-2xl font-bold text-foreground mb-1">
+          MiamWeek
         </h1>
-        <p className="text-muted">
+        <p className="text-muted text-sm">
           Ton assistant courses intelligent
         </p>
       </div>
+
+      {/* Today's meals */}
+      {todayMeals.length > 0 && (
+        <Link href="/planning" className="block bg-card border border-border rounded-xl p-4 mb-4 hover:shadow-sm transition-shadow">
+          <h2 className="font-semibold text-sm text-muted mb-2">Aujourd&apos;hui</h2>
+          <div className="flex gap-4">
+            {lunchMeals.length > 0 && (
+              <div className="flex-1">
+                <p className="text-xs text-muted mb-1">Midi</p>
+                {lunchMeals.map((m, i) => (
+                  <p key={i} className="text-sm font-medium">{m.custom_name || "Recette"}</p>
+                ))}
+              </div>
+            )}
+            {dinnerMeals.length > 0 && (
+              <div className="flex-1">
+                <p className="text-xs text-muted mb-1">Soir</p>
+                {dinnerMeals.map((m, i) => (
+                  <p key={i} className="text-sm font-medium">{m.custom_name || "Recette"}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        </Link>
+      )}
 
       {/* Shortcuts */}
       <div className="bg-card border border-border rounded-xl p-5 mb-6">

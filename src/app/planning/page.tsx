@@ -46,7 +46,15 @@ export default function PlanningPage() {
   } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [customName, setCustomName] = useState("");
-  const [mealConfigs, setMealConfigs] = useState<Record<string, MealConfig>>({});
+  const [mealConfigs, setMealConfigs] = useState<Record<string, MealConfig>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("miamweek_meal_configs");
+        return saved ? JSON.parse(saved) : {};
+      } catch { return {}; }
+    }
+    return {};
+  });
   const [autoFilling, setAutoFilling] = useState(false);
   const todayRef = useRef<HTMLDivElement>(null);
   const scrollBoxRef = useRef<HTMLDivElement>(null);
@@ -56,6 +64,13 @@ export default function PlanningPage() {
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
+
+  // Persist meal configs to localStorage
+  useEffect(() => {
+    if (Object.keys(mealConfigs).length > 0) {
+      localStorage.setItem("miamweek_meal_configs", JSON.stringify(mealConfigs));
+    }
+  }, [mealConfigs]);
 
   const todayDayOfWeek = useMemo(() => {
     const day = today.getDay();

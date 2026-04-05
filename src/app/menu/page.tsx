@@ -90,27 +90,43 @@ export default function MenuPage() {
         });
       }
     }
+    // Helper: add recipe ingredients or fallback to generic name
+    const addRecipeOrName = async (name: string, label: string) => {
+      const matched = recipes.find((r) => r.name.toLowerCase() === name.toLowerCase());
+      if (matched && matched.ingredients.length > 0) {
+        // Add each ingredient individually
+        for (const ing of matched.ingredients) {
+          await fetch("/api/list", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productName: ing.name,
+              quantity: ing.quantity || 1,
+              unit: ing.unit || "pcs",
+              category: ing.category || "Autre",
+              source: "recipe", listStatus: "prep", sourceRecipe: `${menuLabel} — ${name}`,
+            }),
+          });
+        }
+      } else {
+        // No matching recipe — add as generic item
+        await fetch("/api/list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productName: `${label}: ${name}`,
+            quantity: 1, unit: "pcs", category: "Autre",
+            source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
+          }),
+        });
+      }
+    };
+
     if (includeEntree && suggestions?.entree) {
-      await fetch("/api/list", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productName: `Entrée: ${suggestions.entree.name}`,
-          quantity: 1, unit: "pcs", category: "Autre",
-          source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
-        }),
-      });
+      await addRecipeOrName(suggestions.entree.name, "Entrée");
     }
     if (includeDessert && suggestions?.dessert) {
-      await fetch("/api/list", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productName: `Dessert: ${suggestions.dessert.name}`,
-          quantity: 1, unit: "pcs", category: "Autre",
-          source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
-        }),
-      });
+      await addRecipeOrName(suggestions.dessert.name, "Dessert");
     }
     if (includeBoisson && suggestions?.boisson) {
       await fetch("/api/list", {
@@ -146,13 +162,19 @@ export default function MenuPage() {
     const weekStart = monday.toISOString().split("T")[0];
     const baseType = planningMeal;
 
+    // Helper: try to match a suggestion name with an existing recipe
+    const matchRecipe = (name: string) =>
+      recipes.find((r) => r.name.toLowerCase() === name.toLowerCase());
+
     if (includeEntree && suggestions?.entree) {
+      const matched = matchRecipe(suggestions.entree.name);
       await fetch("/api/meal-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           weekStart, dayOfWeek,
           mealType: `${baseType}_entree`,
+          recipeId: matched?.id || null,
           customName: suggestions.entree.name,
         }),
       });
@@ -170,12 +192,14 @@ export default function MenuPage() {
       });
     }
     if (includeDessert && suggestions?.dessert) {
+      const matched = matchRecipe(suggestions.dessert.name);
       await fetch("/api/meal-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           weekStart, dayOfWeek,
           mealType: `${baseType}_dessert`,
+          recipeId: matched?.id || null,
           customName: suggestions.dessert.name,
         }),
       });

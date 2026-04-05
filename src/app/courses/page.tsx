@@ -32,17 +32,17 @@ export default function CoursesPage() {
       });
   }, []);
 
-  const { isOnline, queueSize, syncNow } = useOfflineSync(fetchItems);
+  const { isOnline, queueSize, isSyncing, syncNow, safeFetch } = useOfflineSync(fetchItems);
 
   useEffect(() => {
     fetchItems();
 
-    // Auto-refresh every 5s for multi-user sync (only when online)
+    // Auto-refresh every 5s — but only if no pending offline mutations
     const interval = setInterval(() => {
-      if (navigator.onLine) fetchItems();
+      if (navigator.onLine) safeFetch();
     }, 5000);
     return () => clearInterval(interval);
-  }, [fetchItems]);
+  }, [fetchItems, safeFetch]);
 
   const toggleItem = async (id: number, checked: boolean) => {
     // Optimistic update - instant visual feedback always

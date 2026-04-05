@@ -124,11 +124,23 @@ export async function offlineFetch(
 export function useOfflineSync(onReconnect: () => void) {
   const [isOnline, setIsOnline] = useState(true);
   const [queueSize, setQueueSize] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const onReconnectRef = useRef(onReconnect);
   onReconnectRef.current = onReconnect;
 
   const updateQueueSize = useCallback(() => {
     setQueueSize(getQueue().length);
+  }, []);
+
+  // Safe fetch: only refresh from server if no pending mutations
+  const safeFetch = useCallback(() => {
+    const pending = getQueue().length;
+    if (pending > 0) {
+      // Don't overwrite local state while we have unsent changes
+      console.log(`[OfflineSync] Skipping refresh — ${pending} mutations pending`);
+      return;
+    }
+    onReconnectRef.current();
   }, []);
 
   useEffect(() => {
@@ -139,20 +151,17 @@ export function useOfflineSync(onReconnect: () => void) {
     const handleOnline = async () => {
       console.log("[OfflineSync] Back online - replaying queue...");
       setIsOnline(true);
+      setIsSyncing(true);
 
-      // Replay queued mutations
+      // Replay queued mutations FIRST, before any fetch
       const result = await replayQueue();
       updateQueueSize();
+      setIsSyncing(false);
 
-      // Refresh data from server
-      if (result.success > 0) {
-        // Small delay to let server process
-        setTimeout(() => {
-          onReconnectRef.current();
-        }, 500);
-      } else {
+      // Only refresh from server AFTER all mutations are sent
+      setTimeout(() => {
         onReconnectRef.current();
-      }
+      }, 500);
     };
 
     const handleOffline = () => {
@@ -176,12 +185,13 @@ export function useOfflineSync(onReconnect: () => void) {
   // Manual sync trigger
   const syncNow = useCallback(async () => {
     if (!navigator.onLine) return;
+    setIsSyncing(true);
     const result = await replayQueue();
     updateQueueSize();
-    if (result.success > 0) {
-      onReconnectRef.current();
-    }
+    setIsSyncing(false);
+    // Always refresh after manual sync
+    onReconnectRef.current();
   }, [updateQueueSize]);
 
-  return { isOnline, queueSize, syncNow, clearQueue };
+  return { isOnline, queueSize, isSyncing, syncNow, safeFetch, clearQueue };
 }

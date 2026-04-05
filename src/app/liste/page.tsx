@@ -130,7 +130,7 @@ export default function ListePage() {
       .catch(() => { /* offline - keep local state */ });
   }, []);
 
-  const { isOnline, queueSize, syncNow } = useOfflineSync(fetchList);
+  const { isOnline, queueSize, syncNow, safeFetch } = useOfflineSync(fetchList);
 
   useEffect(() => {
     fetch("/api/products")
@@ -143,9 +143,9 @@ export default function ListePage() {
       .catch(console.error);
     fetchList();
 
-    // Auto-refresh every 5s for multi-user sync (only when online)
+    // Auto-refresh every 5s — but only if no pending offline mutations
     const interval = setInterval(() => {
-      if (navigator.onLine) fetchList();
+      if (navigator.onLine) safeFetch();
     }, 5000);
     return () => clearInterval(interval);
   }, [fetchList]);

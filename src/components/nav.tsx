@@ -62,37 +62,66 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-b border-border bg-card sticky top-0 z-50 shadow-sm">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="flex items-center justify-between h-14">
-          <Link href="/" className="flex items-center gap-2">
-            <Logo size={28} />
-            <span className="text-lg font-bold text-primary">MiamWeek</span>
-          </Link>
-          <div className="flex gap-1">
-            {links.map((link) => {
-              const isActive =
-                link.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(link.href);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${
-                    isActive
-                      ? "bg-primary-light text-primary"
-                      : "text-muted hover:text-foreground hover:bg-card-hover"
-                  }`}
-                >
-                  {icons[link.icon]}
-                  <span className="hidden sm:inline">{link.label}</span>
-                </Link>
-              );
-            })}
+    <>
+      {/* Desktop: top navbar */}
+      <nav className="hidden md:block border-b border-border bg-card sticky top-0 z-50 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex items-center justify-between h-14">
+            <Link href="/" className="flex items-center gap-2">
+              <Logo size={28} />
+              <span className="text-lg font-bold text-primary">MiamWeek</span>
+            </Link>
+            <div className="flex gap-1">
+              {links.map((link) => {
+                const isActive =
+                  link.href === "/"
+                    ? pathname === "/"
+                    : pathname.startsWith(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${
+                      isActive
+                        ? "bg-primary-light text-primary"
+                        : "text-muted hover:text-foreground hover:bg-card-hover"
+                    }`}
+                  >
+                    {icons[link.icon]}
+                    <span>{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      {/* Mobile: bottom tab bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+        <div className="flex items-center justify-around h-16 px-1">
+          {links.map((link) => {
+            const isActive =
+              link.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`flex flex-col items-center justify-center gap-0.5 py-1 px-1.5 rounded-lg min-w-0 transition-colors ${
+                  isActive
+                    ? "text-primary"
+                    : "text-muted"
+                }`}
+              >
+                {icons[link.icon]}
+                <span className="text-[9px] font-medium truncate max-w-[48px]">{link.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 }

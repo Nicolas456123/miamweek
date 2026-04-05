@@ -559,11 +559,11 @@ export default function PlanningPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
+    <div className="max-w-5xl mx-auto flex flex-col h-[calc(100vh-160px)] md:h-[calc(100vh-120px)]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <h1 className="text-xl font-bold">Planning repas</h1>
-        <div className="flex gap-2">
+      <div className="mb-3 shrink-0">
+        <h1 className="text-xl font-bold mb-2">Planning repas</h1>
+        <div className="flex gap-2 flex-wrap">
           <Link
             href="/menu"
             className="px-3 py-2 bg-card border border-border rounded-xl text-sm font-medium hover:shadow-sm transition-shadow"
@@ -582,7 +582,7 @@ export default function PlanningPage() {
               onClick={addWeekToList}
               className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
             >
-              Ajouter à ma liste
+              📝 Ajouter à ma liste
             </button>
           )}
         </div>

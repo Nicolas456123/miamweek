@@ -243,7 +243,7 @@ export default function RecettesPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
+    <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-160px)] md:h-[calc(100vh-120px)]">
       <div className="flex items-center justify-between mb-3 shrink-0">
         <h1 className="text-xl font-bold">Recettes</h1>
         <span className="text-sm text-muted">
@@ -274,7 +274,7 @@ export default function RecettesPage() {
       </div>
 
       {/* Category filter tabs */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 scrollbar-hide shrink-0">
+      <div className="flex gap-3 overflow-x-auto pb-3 mb-3 scrollbar-hide shrink-0 px-1">
         <button
           onClick={() => setFilterCategory("")}
           className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors shrink-0 ${
@@ -480,21 +480,17 @@ export default function RecettesPage() {
                       <span className="text-xs text-muted">{recipe.ingredients.length} ingrédients</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-2">
+                  <div className="flex items-center gap-2 ml-2 shrink-0">
                     <button onClick={(e) => { e.stopPropagation(); addAllToList(recipe); }}
-                      className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                      className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap ${
                         addedToList.has(recipe.id)
                           ? "bg-primary-light text-primary"
                           : "bg-primary text-white hover:bg-primary-hover"
                       }`}>
                       {addedToList.has(recipe.id) ? "Ajouté !" : "+ Liste"}
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); editRecipe(recipe); }}
-                      className="text-xs text-muted hover:text-foreground px-2 py-1">Modifier</button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteRecipe(recipe.id); }}
-                      className="text-xs text-muted hover:text-danger px-2 py-1">Supprimer</button>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                      className={`text-muted transition-transform ${isExpanded ? "rotate-180" : ""}`}>
+                      className={`text-muted transition-transform shrink-0 ${isExpanded ? "rotate-180" : ""}`}>
                       <polyline points="6 9 12 15 18 9"/>
                     </svg>
                   </div>
@@ -504,6 +500,17 @@ export default function RecettesPage() {
               {/* Expanded details */}
               {isExpanded && (
                 <div className="border-t border-border px-4 pb-4 space-y-4">
+                  {/* Mobile actions */}
+                  <div className="flex gap-2 pt-3 sm:hidden">
+                    <button onClick={() => editRecipe(recipe)}
+                      className="flex-1 text-xs text-center py-2 bg-card border border-border rounded-lg font-medium hover:bg-card-hover">
+                      Modifier
+                    </button>
+                    <button onClick={() => deleteRecipe(recipe.id)}
+                      className="flex-1 text-xs text-center py-2 bg-card border border-border rounded-lg font-medium text-danger hover:bg-danger-light">
+                      Supprimer
+                    </button>
+                  </div>
                   {/* Time details */}
                   {(recipe.prep_time || recipe.cook_time) && (
                     <div className="flex gap-4 pt-3">

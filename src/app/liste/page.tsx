@@ -324,7 +324,7 @@ export default function ListePage() {
   const isInList = (productId: number) => !!getListItem(productId);
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
+    <div className="flex flex-col h-[calc(100vh-160px)] md:h-[calc(100vh-120px)]">
       {/* Offline banner */}
       {(!isOnline || queueSize > 0) && (
         <div
@@ -359,13 +359,13 @@ export default function ListePage() {
       )}
 
       <div className="flex items-center justify-between mb-3 shrink-0">
-        <h1 className="text-xl font-bold">Préparer ma liste</h1>
+        <h1 className="text-xl font-bold">Ma liste</h1>
         {listItems.length > 0 && (
           <button
             onClick={validateList}
-            className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors shadow-sm"
+            className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors shadow-sm whitespace-nowrap"
           >
-            Valider la liste ({listItems.length} articles)
+            Valider ({listItems.length} articles)
           </button>
         )}
       </div>

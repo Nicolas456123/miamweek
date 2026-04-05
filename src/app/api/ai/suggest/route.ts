@@ -1,6 +1,22 @@
 import { NextRequest } from "next/server";
+import { query } from "@/db";
 
 export const runtime = "nodejs";
+
+async function getPreferences(): Promise<string> {
+  try {
+    const result = await query("SELECT * FROM food_preferences");
+    if (result.rows.length === 0) return "";
+    const dislikes = result.rows.filter((r) => r.type === "dislike").map((r) => r.name as string);
+    const allergies = result.rows.filter((r) => r.type === "allergy").map((r) => r.name as string);
+    const loves = result.rows.filter((r) => r.type === "love").map((r) => r.name as string);
+    const parts: string[] = [];
+    if (allergies.length > 0) parts.push(`ALLERGIES (NE JAMAIS PROPOSER): ${allergies.join(", ")}`);
+    if (dislikes.length > 0) parts.push(`N'aime pas: ${dislikes.join(", ")}`);
+    if (loves.length > 0) parts.push(`Adore: ${loves.join(", ")}`);
+    return parts.length > 0 ? `\n\nPréférences alimentaires:\n${parts.join("\n")}` : "";
+  } catch { return ""; }
+}
 
 const MOCK_RECIPES = [
   {
@@ -57,6 +73,7 @@ export async function POST(request: NextRequest) {
 
     const isMealPlan = prompt.toLowerCase().includes("planning") || prompt.toLowerCase().includes("semaine complète");
     const apiKey = process.env.ANTHROPIC_API_KEY;
+    const prefs = apiKey ? await getPreferences() : "";
 
     if (!apiKey) {
       if (isMealPlan) {
@@ -78,7 +95,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown) de cette forme:
   { "dayOfWeek": 0, "mealType": "lunch", "name": "Nom du plat" },
   { "dayOfWeek": 0, "mealType": "dinner", "name": "Nom du plat" }
 ]
-Propose des plats variés, équilibrés, faciles. 14 repas au total.`;
+Propose des plats variés, équilibrés, faciles. 14 repas au total.${prefs}`;
     } else {
       systemPrompt = `Tu es un chef cuisinier expert.
 Réponds UNIQUEMENT avec un JSON valide (sans markdown) contenant des recettes:
@@ -94,7 +111,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown) contenant des recettes:
   }
 ]
 Catégories d'ingrédients: Fruits & Légumes, Viandes & Poissons, Produits laitiers, Boulangerie, Épicerie, Surgelés, Boissons, Hygiène & Maison.
-Propose 1 à 3 recettes. Ne réponds qu'avec le JSON.`;
+Propose 1 à 3 recettes. Ne réponds qu'avec le JSON.${prefs}`;
     }
 
     const message = await client.messages.create({

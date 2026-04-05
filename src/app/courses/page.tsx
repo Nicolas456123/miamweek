@@ -124,7 +124,10 @@ export default function CoursesPage() {
     const res = await fetch("/api/list/finish", { method: "POST" });
     const data = await res.json();
     toast(`Courses terminées ! ${data.itemsProcessed || 0} produit(s) ajouté(s) à l'inventaire.`);
-    fetchItems();
+    // Redirect to inventory after a short delay
+    setTimeout(() => {
+      window.location.href = "/inventaire";
+    }, 1500);
   };
 
   const cancelShopping = async () => {

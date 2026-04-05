@@ -21,9 +21,10 @@ type Recipe = {
   prep_time: number | null;
   cook_time: number | null;
   difficulty: string | null;
-  utensils: string | null; // JSON string
-  steps: string | null; // JSON string
+  utensils: string | null;
+  steps: string | null;
   ingredients: Ingredient[];
+  is_favorite?: number | null;
 };
 
 function parseJSON<T>(val: string | null | undefined, fallback: T): T {
@@ -44,6 +45,7 @@ export default function RecettesPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
+  const [filterFavorites, setFilterFavorites] = useState(false);
   const [search, setSearch] = useState("");
   const [addedToList, setAddedToList] = useState<Set<number>>(new Set());
   const [form, setForm] = useState({
@@ -69,6 +71,18 @@ export default function RecettesPage() {
   };
 
   useEffect(() => { fetchRecipes(); }, []);
+
+  const toggleFavorite = async (recipeId: number) => {
+    // Optimistic update
+    setRecipes((prev) =>
+      prev.map((r) => r.id === recipeId ? { ...r, is_favorite: r.is_favorite ? 0 : 1 } : r)
+    );
+    await fetch("/api/recipes/favorite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipeId }),
+    });
+  };
 
   const resetForm = () => {
     setForm({
@@ -234,6 +248,7 @@ export default function RecettesPage() {
   const categories = [...new Set(recipes.map((r) => r.category).filter(Boolean))] as string[];
 
   const filteredRecipes = recipes.filter((r) => {
+    if (filterFavorites && !r.is_favorite) return false;
     if (filterCategory && r.category !== filterCategory) return false;
     if (search) {
       const s = search.toLowerCase();
@@ -278,14 +293,24 @@ export default function RecettesPage() {
       {/* Category filter tabs */}
       <div className="flex gap-3 overflow-x-auto pb-3 mb-3 scrollbar-hide shrink-0 px-1">
         <button
-          onClick={() => setFilterCategory("")}
+          onClick={() => { setFilterCategory(""); setFilterFavorites(false); }}
           className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors shrink-0 ${
-            !filterCategory
+            !filterCategory && !filterFavorites
               ? "bg-primary text-white shadow-sm"
               : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
           }`}
         >
           Toutes
+        </button>
+        <button
+          onClick={() => { setFilterFavorites(!filterFavorites); setFilterCategory(""); }}
+          className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors shrink-0 ${
+            filterFavorites
+              ? "bg-red-500 text-white shadow-sm"
+              : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
+          }`}
+        >
+          ❤️ Favoris
         </button>
         {categories.map((c) => (
           <button
@@ -483,6 +508,13 @@ export default function RecettesPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-2 shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe.id); }}
+                      className="text-lg transition-transform hover:scale-110"
+                      title={recipe.is_favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+                    >
+                      {recipe.is_favorite ? "❤️" : "🤍"}
+                    </button>
                     <button onClick={(e) => { e.stopPropagation(); addAllToList(recipe); }}
                       className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap ${
                         addedToList.has(recipe.id)

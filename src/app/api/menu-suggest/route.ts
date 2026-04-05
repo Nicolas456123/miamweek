@@ -38,6 +38,22 @@ export async function POST(request: Request) {
       }
     } catch { /* ignore */ }
 
+    // Get food preferences
+    let prefsContext = "";
+    try {
+      const prefs = await query("SELECT * FROM food_preferences");
+      if (prefs.rows.length > 0) {
+        const allergies = prefs.rows.filter((r) => r.type === "allergy").map((r) => r.name as string);
+        const dislikes = prefs.rows.filter((r) => r.type === "dislike").map((r) => r.name as string);
+        const loves = prefs.rows.filter((r) => r.type === "love").map((r) => r.name as string);
+        const parts2: string[] = [];
+        if (allergies.length > 0) parts2.push(`ALLERGIES (NE JAMAIS PROPOSER): ${allergies.join(", ")}`);
+        if (dislikes.length > 0) parts2.push(`N'aime pas: ${dislikes.join(", ")}`);
+        if (loves.length > 0) parts2.push(`Adore: ${loves.join(", ")}`);
+        if (parts2.length > 0) prefsContext = `\n${parts2.join("\n")}`;
+      }
+    } catch { /* ignore */ }
+
     const parts = [];
     if (wantEntree) parts.push('"entree": {"name": "...", "description": "..."}');
     if (wantDessert) parts.push('"dessert": {"name": "...", "description": "..."}');
@@ -54,7 +70,7 @@ Suggère des accompagnements pour un repas.
 Réponds UNIQUEMENT en JSON valide (pas de markdown):
 {${parts.join(", ")}}
 Chaque suggestion doit avoir "name" (nom court) et "description" (1 ligne).
-Les suggestions doivent bien s'accorder avec le plat principal.${inventoryContext}`,
+Les suggestions doivent bien s'accorder avec le plat principal.${inventoryContext}${prefsContext}`,
       messages: [{ role: "user", content: `Plat principal: ${platName}` }],
     });
 

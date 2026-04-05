@@ -321,7 +321,8 @@ export default function ListePage() {
   };
 
   const startListening = () => {
-    const SpeechRecognition = (window as unknown as { webkitSpeechRecognition?: typeof window.SpeechRecognition; SpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition || (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     if (!SpeechRecognition) {
       setSmartResult("Reconnaissance vocale non supportée par ce navigateur");
       return;
@@ -331,7 +332,8 @@ export default function ListePage() {
     recognition.continuous = true;
     recognition.interimResults = true;
 
-    recognition.onresult = (event: Event & { results: SpeechRecognitionResultList }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
       let transcript = "";
       for (let i = 0; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;

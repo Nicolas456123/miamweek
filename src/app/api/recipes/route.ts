@@ -4,17 +4,22 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const recipesResult = await query("SELECT * FROM recipes");
+    // Single query with JOIN instead of N+1
+    const recipesResult = await query("SELECT * FROM recipes ORDER BY is_favorite DESC, name ASC");
+    const allIngredients = await query("SELECT * FROM recipe_ingredients");
 
-    const recipesWithIngredients = await Promise.all(
-      recipesResult.rows.map(async (recipe) => {
-        const ingredientsResult = await query(
-          "SELECT * FROM recipe_ingredients WHERE recipe_id = ?",
-          [recipe.id as number]
-        );
-        return { ...recipe, ingredients: ingredientsResult.rows };
-      })
-    );
+    // Group ingredients by recipe_id
+    const ingredientsByRecipe: Record<number, typeof allIngredients.rows> = {};
+    for (const ing of allIngredients.rows) {
+      const rid = ing.recipe_id as number;
+      if (!ingredientsByRecipe[rid]) ingredientsByRecipe[rid] = [];
+      ingredientsByRecipe[rid].push(ing);
+    }
+
+    const recipesWithIngredients = recipesResult.rows.map((recipe) => ({
+      ...recipe,
+      ingredients: ingredientsByRecipe[recipe.id as number] || [],
+    }));
 
     return Response.json(recipesWithIngredients);
   } catch (error) {

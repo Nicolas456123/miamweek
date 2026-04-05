@@ -64,9 +64,14 @@ async function replayQueue(): Promise<{ success: number; failed: number }> {
       });
       if (res.ok) {
         success++;
+      } else if (res.status >= 500) {
+        // Server error — keep in queue to retry later
+        console.warn(`[OfflineSync] Server error ${res.status}, will retry`);
+        remaining.push(mutation);
+        failed++;
       } else {
-        // Server rejected it (e.g. item already deleted) - drop it
-        console.warn(`[OfflineSync] Server rejected mutation: ${res.status}`);
+        // Client error (4xx) — permanent failure, drop it
+        console.warn(`[OfflineSync] Client error ${res.status}, dropping mutation`);
         success++;
       }
     } catch {

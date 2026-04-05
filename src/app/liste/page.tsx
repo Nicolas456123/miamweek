@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { CategoryIcon } from "@/components/category-icons";
 import { CategoryFilter, getFilterCategories } from "@/components/category-filter";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
@@ -172,12 +172,12 @@ export default function ListePage() {
   const getPantryInfo = (name: string): PantryItem | undefined =>
     pantryByName[name.toLowerCase()];
 
-  let nextTempId = -1;
+  const nextTempIdRef = useRef(-1);
 
   const addProduct = (product: Product, qty?: number) => {
     const defaultQty = qty || product.default_quantity || 1;
     // Optimistic: add to list instantly
-    const tempId = nextTempId--;
+    const tempId = nextTempIdRef.current--;
     const newItem: ListItem = {
       id: tempId,
       product_id: product.id,
@@ -219,7 +219,7 @@ export default function ListePage() {
 
   const addCustom = () => {
     if (!customName.trim()) return;
-    const tempId = nextTempId--;
+    const tempId = nextTempIdRef.current--;
     const newItem: ListItem = {
       id: tempId,
       product_id: null,

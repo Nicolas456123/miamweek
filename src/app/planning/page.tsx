@@ -193,26 +193,38 @@ export default function PlanningPage() {
     const recipeMeals = meals.filter((m) => m.recipe_id);
     if (recipeMeals.length === 0) return;
 
-    for (const meal of recipeMeals) {
-      const res = await fetch(`/api/recipes/${meal.recipe_id}`);
-      const recipe = await res.json();
-      if (!recipe.ingredients) continue;
+    // Fetch all recipes in parallel
+    const recipeResponses = await Promise.all(
+      recipeMeals.map((m) => fetch(`/api/recipes/${m.recipe_id}`).then((r) => r.json()))
+    );
 
+    // Collect all ingredients to add
+    const toAdd: { productName: string; quantity: number; unit: string; category: string; sourceRecipe: string }[] = [];
+    for (const recipe of recipeResponses) {
+      if (!recipe.ingredients) continue;
       for (const ing of recipe.ingredients) {
-        await fetch("/api/list", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            productName: ing.name,
-            quantity: ing.quantity || 1,
-            unit: ing.unit || "pcs",
-            category: ing.category || "Autre",
-            source: "recipe",
-            listStatus: "prep",
-            sourceRecipe: recipe.name,
-          }),
+        toAdd.push({
+          productName: ing.name,
+          quantity: ing.quantity || 1,
+          unit: ing.unit || "pcs",
+          category: ing.category || "Autre",
+          sourceRecipe: recipe.name,
         });
       }
+    }
+
+    // Add all ingredients in parallel (batches of 5)
+    for (let i = 0; i < toAdd.length; i += 5) {
+      const batch = toAdd.slice(i, i + 5);
+      await Promise.all(
+        batch.map((ing) =>
+          fetch("/api/list", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...ing, source: "recipe", listStatus: "prep" }),
+          })
+        )
+      );
     }
     toast(`${recipeMeals.length} recette(s) ajoutées à la liste`);
   };

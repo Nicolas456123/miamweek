@@ -461,6 +461,122 @@ export default function ListePage() {
         />
       </div>
 
+      {/* Smart add buttons */}
+      <div className="flex gap-2 mb-3 shrink-0">
+        {([
+          { mode: "text" as const, icon: "✏️", label: "Taper" },
+          { mode: "photo" as const, icon: "📸", label: "Photo" },
+          { mode: "voice" as const, icon: "🎤", label: "Parler" },
+        ]).map((m) => (
+          <button
+            key={m.mode}
+            onClick={() => {
+              setSmartMode(smartMode === m.mode ? "none" : m.mode);
+              setSmartText("");
+              setSmartImage(null);
+              setSmartResult(null);
+            }}
+            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              smartMode === m.mode
+                ? "bg-primary text-white shadow-sm"
+                : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
+            }`}
+          >
+            <span>{m.icon}</span>
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Smart scan panel */}
+      {smartMode !== "none" && (
+        <div className="bg-card border border-border rounded-xl p-3 mb-3 shrink-0 space-y-2">
+          {smartMode === "text" && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={smartText}
+                onChange={(e) => setSmartText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && smartText.trim()) handleSmartScan();
+                }}
+                placeholder="du lait, 6 oeufs, 500g de farine..."
+                className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                autoFocus
+              />
+              <button
+                onClick={handleSmartScan}
+                disabled={!smartText.trim() || smartLoading}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {smartLoading ? "..." : "Ajouter"}
+              </button>
+            </div>
+          )}
+          {smartMode === "photo" && (
+            <div className="space-y-2">
+              {smartImage ? (
+                <div className="relative">
+                  <img src={smartImage} alt="Scan" className="w-full max-h-40 object-contain rounded-lg bg-gray-100" />
+                  <button
+                    onClick={() => setSmartImage(null)}
+                    className="absolute top-1 right-1 w-6 h-6 bg-danger text-white rounded-full text-xs flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center py-4 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary transition-colors">
+                  <span className="text-2xl mb-1">📸</span>
+                  <span className="text-xs text-muted">Photo, screenshot ou ticket</span>
+                  <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
+                </label>
+              )}
+              {smartImage && (
+                <button onClick={handleSmartScan} disabled={smartLoading}
+                  className="w-full py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+                  {smartLoading ? "Analyse en cours..." : "Analyser et ajouter"}
+                </button>
+              )}
+            </div>
+          )}
+          {smartMode === "voice" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={isListening ? undefined : startListening}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all shrink-0 ${
+                    isListening ? "bg-danger text-white animate-pulse" : "bg-primary text-white hover:bg-primary-hover"
+                  }`}
+                >
+                  🎤
+                </button>
+                <div className="flex-1">
+                  {smartText ? (
+                    <p className="text-sm">{smartText}</p>
+                  ) : (
+                    <p className="text-sm text-muted italic">
+                      {isListening ? "Parle maintenant..." : "Appuie pour dicter"}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {smartText && (
+                <button onClick={handleSmartScan} disabled={smartLoading}
+                  className="w-full py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+                  {smartLoading ? "Ajout en cours..." : "Ajouter à la liste"}
+                </button>
+              )}
+            </div>
+          )}
+          {smartResult && (
+            <p className={`text-sm font-medium text-center py-1 ${smartResult.includes("ajouté") ? "text-primary" : "text-danger"}`}>
+              {smartResult}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Category tabs */}
       <div className="mb-3 shrink-0">
         <CategoryFilter active={activeCategory} onChange={setActiveCategory} />
@@ -577,147 +693,7 @@ export default function ListePage() {
             })}
           </div>
 
-          {/* Smart add bar */}
-          <div className="mt-3 space-y-2">
-            {/* Mode buttons */}
-            <div className="flex gap-2">
-              {([
-                { mode: "text" as const, icon: "✏️", label: "Taper" },
-                { mode: "photo" as const, icon: "📸", label: "Photo" },
-                { mode: "voice" as const, icon: "🎤", label: "Parler" },
-              ]).map((m) => (
-                <button
-                  key={m.mode}
-                  onClick={() => {
-                    setSmartMode(smartMode === m.mode ? "none" : m.mode);
-                    setSmartText("");
-                    setSmartImage(null);
-                    setSmartResult(null);
-                  }}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                    smartMode === m.mode
-                      ? "bg-primary text-white shadow-sm"
-                      : "bg-card border border-border text-muted hover:text-foreground hover:shadow-sm"
-                  }`}
-                >
-                  <span>{m.icon}</span>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Smart panel */}
-            {smartMode !== "none" && (
-              <div className="bg-card border border-border rounded-xl p-3 space-y-2">
-                {/* Text mode */}
-                {smartMode === "text" && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={smartText}
-                      onChange={(e) => setSmartText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && smartText.trim()) handleSmartScan();
-                      }}
-                      placeholder="du lait, 6 oeufs, 500g de farine..."
-                      className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleSmartScan}
-                      disabled={!smartText.trim() || smartLoading}
-                      className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
-                    >
-                      {smartLoading ? "..." : "Ajouter"}
-                    </button>
-                  </div>
-                )}
-
-                {/* Photo mode */}
-                {smartMode === "photo" && (
-                  <div className="space-y-2">
-                    {smartImage ? (
-                      <div className="relative">
-                        <img src={smartImage} alt="Scan" className="w-full max-h-48 object-contain rounded-lg bg-gray-100" />
-                        <button
-                          onClick={() => setSmartImage(null)}
-                          className="absolute top-1 right-1 w-6 h-6 bg-danger text-white rounded-full text-xs flex items-center justify-center"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary transition-colors">
-                        <span className="text-3xl mb-1">📸</span>
-                        <span className="text-sm text-muted">Photo, screenshot ou ticket</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                    {smartImage && (
-                      <button
-                        onClick={handleSmartScan}
-                        disabled={smartLoading}
-                        className="w-full py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50"
-                      >
-                        {smartLoading ? "Analyse en cours..." : "Analyser et ajouter"}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Voice mode */}
-                {smartMode === "voice" && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={isListening ? undefined : startListening}
-                        className={`w-12 h-12 rounded-full flex items-center justify-center text-xl transition-all shrink-0 ${
-                          isListening
-                            ? "bg-danger text-white animate-pulse"
-                            : "bg-primary text-white hover:bg-primary-hover"
-                        }`}
-                      >
-                        🎤
-                      </button>
-                      <div className="flex-1">
-                        {smartText ? (
-                          <p className="text-sm">{smartText}</p>
-                        ) : (
-                          <p className="text-sm text-muted italic">
-                            {isListening ? "Parle maintenant..." : "Appuie sur le micro pour dicter"}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {smartText && (
-                      <button
-                        onClick={handleSmartScan}
-                        disabled={smartLoading}
-                        className="w-full py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50"
-                      >
-                        {smartLoading ? "Ajout en cours..." : "Ajouter à la liste"}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Result feedback */}
-                {smartResult && (
-                  <p className={`text-sm font-medium text-center py-1 ${
-                    smartResult.includes("ajouté") ? "text-primary" : "text-danger"
-                  }`}>
-                    {smartResult}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+          {/* end of products grid container */}
         </div>
 
         {/* Right: Current list - Desktop sidebar */}

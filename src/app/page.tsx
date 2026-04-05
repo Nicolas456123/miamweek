@@ -109,7 +109,7 @@ const shortcuts = [
 
 export default function HomePage() {
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto pb-20 md:pb-0">
       {/* Hero */}
       <div className="text-center py-8">
         <div className="flex justify-center mb-4">

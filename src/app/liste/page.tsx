@@ -412,7 +412,7 @@ export default function ListePage() {
   const isInList = (productId: number) => !!getListItem(productId);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-160px)] md:h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-100px)]">
       {/* Offline banner */}
       {(!isOnline || queueSize > 0) && (
         <div
@@ -448,14 +448,24 @@ export default function ListePage() {
 
       <div className="flex items-center justify-between mb-3 shrink-0">
         <h1 className="text-xl font-bold">Ma liste</h1>
-        {listItems.length > 0 && (
-          <button
-            onClick={validateList}
-            className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors shadow-sm whitespace-nowrap"
-          >
-            Valider ({listItems.length} articles)
-          </button>
-        )}
+        <div className="flex gap-2">
+          {listItems.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowMobileList(true)}
+                className="lg:hidden px-3 py-2 bg-card border-2 border-primary rounded-xl text-sm font-bold text-primary transition-colors flex items-center gap-1.5"
+              >
+                🛒 <span>{listItems.length}</span>
+              </button>
+              <button
+                onClick={validateList}
+                className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors shadow-sm whitespace-nowrap"
+              >
+                Valider ({listItems.length})
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Search */}
@@ -718,19 +728,9 @@ export default function ListePage() {
         </div>
       </div>
 
-      {/* Mobile: floating button + bottom drawer */}
-      {listItems.length > 0 && (
+      {/* Mobile: bottom drawer */}
+      {listItems.length > 0 && showMobileList && (
         <>
-          {/* Floating button */}
-          <button
-            onClick={() => setShowMobileList(true)}
-            className="lg:hidden fixed bottom-6 right-6 z-40 bg-primary text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-hover transition-colors"
-          >
-            <span className="text-lg font-bold">{listItems.length}</span>
-          </button>
-
-          {/* Drawer overlay */}
-          {showMobileList && (
             <div className="lg:hidden fixed inset-0 z-50">
               <div
                 className="absolute inset-0 bg-black/40"
@@ -780,7 +780,6 @@ export default function ListePage() {
                 </div>
               </div>
             </div>
-          )}
         </>
       )}
     </div>

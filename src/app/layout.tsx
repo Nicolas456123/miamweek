@@ -21,7 +21,9 @@ export const metadata: Metadata = {
     "Planificateur de courses intelligent - liste, recettes, suivi des prix et consommation",
   icons: {
     icon: "/icon.svg",
+    apple: "/apple-touch-icon.png",
   },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

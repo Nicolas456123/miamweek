@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, quantity, location, expiresAt } = body;
+    const { id, quantity, unit, location, expiresAt } = body;
 
     if (!id) {
       return Response.json({ error: "id is required" }, { status: 400 });
@@ -90,6 +90,10 @@ export async function PUT(request: Request) {
     if (quantity !== undefined) {
       updates.push("quantity = ?");
       args.push(quantity);
+    }
+    if (unit !== undefined) {
+      updates.push("unit = ?");
+      args.push(unit);
     }
     if (location !== undefined) {
       updates.push("location = ?");

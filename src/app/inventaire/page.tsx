@@ -28,13 +28,6 @@ type PantryItem = {
   defaultUnit: string | null;
 };
 
-const LOCATIONS = [
-  { key: "frigo", label: "Frigo", icon: "🧊" },
-  { key: "congélateur", label: "Congélateur", icon: "❄️" },
-  { key: "placard", label: "Placard", icon: "🗄️" },
-  { key: "autre", label: "Autre", icon: "📦" },
-] as const;
-
 const UNITS = ["pcs", "g", "kg", "ml", "L", "cl", "lot", "bout.", "boîte"];
 
 export default function InventairePage() {
@@ -44,7 +37,6 @@ export default function InventairePage() {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("placard");
   const [showSmartAdd, setShowSmartAdd] = useState(false);
   const [smartMode, setSmartMode] = useState<"photo" | "text" | "voice">("text");
   const [smartText, setSmartText] = useState("");
@@ -59,7 +51,7 @@ export default function InventairePage() {
   const [customUnit, setCustomUnit] = useState("pcs");
 
   // Sort
-  const [sortCol, setSortCol] = useState<"name" | "category" | "location" | "expiry">("name");
+  const [sortCol, setSortCol] = useState<"name" | "category" | "expiry">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
@@ -87,7 +79,6 @@ export default function InventairePage() {
         quantity: 1,
         unit: product.defaultUnit,
         category: product.category,
-        location: selectedLocation,
       }),
     });
     fetchPantry();
@@ -121,7 +112,6 @@ export default function InventairePage() {
         quantity: 1,
         unit: customUnit,
         category: customCategory,
-        location: selectedLocation,
       }),
     });
     // Refresh products list and pantry
@@ -144,11 +134,11 @@ export default function InventairePage() {
     fetchPantry();
   };
 
-  const updateLocation = async (id: number, location: string) => {
+  const updateUnit = async (id: number, unit: string) => {
     await fetch("/api/pantry", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, location }),
+      body: JSON.stringify({ id, unit }),
     });
     fetchPantry();
   };
@@ -250,8 +240,6 @@ export default function InventairePage() {
         cmp = a.product_name.localeCompare(b.product_name);
       } else if (sortCol === "category") {
         cmp = (a.category || "").localeCompare(b.category || "");
-      } else if (sortCol === "location") {
-        cmp = (a.location || "").localeCompare(b.location || "");
       } else if (sortCol === "expiry") {
         const ea = a.expiry_date || a.expires_at || "9999";
         const eb = b.expiry_date || b.expires_at || "9999";
@@ -436,7 +424,7 @@ export default function InventairePage() {
       {/* Add panel */}
       {showAdd && (
         <div className="mb-4 bg-card border border-border rounded-xl p-4">
-          <div className="flex gap-2 mb-3">
+          <div className="mb-3">
             <input
               type="text"
               value={addSearch}
@@ -446,20 +434,9 @@ export default function InventairePage() {
                 setCustomName(e.target.value);
               }}
               placeholder="Rechercher un produit à ajouter..."
-              className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               autoFocus
             />
-            <select
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-              className="bg-background border border-border rounded-lg px-3 py-2 text-sm"
-            >
-              {LOCATIONS.map((loc) => (
-                <option key={loc.key} value={loc.key}>
-                  {loc.icon} {loc.label}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Product grid */}
@@ -580,27 +557,6 @@ export default function InventairePage() {
         />
       </div>
 
-      {/* Summary cards */}
-      {items.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-          {LOCATIONS.map((loc) => {
-            const count = items.filter(
-              (i) => (i.location || "placard") === loc.key
-            ).length;
-            return (
-              <div
-                key={loc.key}
-                className="bg-card border border-border rounded-xl p-3 text-center"
-              >
-                <span className="text-xl">{loc.icon}</span>
-                <p className="font-bold text-lg">{count}</p>
-                <p className="text-xs text-muted">{loc.label}</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* Table */}
       {items.length === 0 ? (
         <div className="text-center py-16 text-muted">
@@ -629,12 +585,7 @@ export default function InventairePage() {
                     Catégorie{sortArrow("category")}
                   </th>
                   <th className="text-center px-3 py-2.5 font-medium">Quantité</th>
-                  <th
-                    className="text-left px-3 py-2.5 font-medium cursor-pointer hover:text-primary select-none"
-                    onClick={() => handleSort("location")}
-                  >
-                    Lieu{sortArrow("location")}
-                  </th>
+                  <th className="text-center px-3 py-2.5 font-medium">Unité</th>
                   <th
                     className="text-left px-3 py-2.5 font-medium cursor-pointer hover:text-primary select-none"
                     onClick={() => handleSort("expiry")}
@@ -679,19 +630,16 @@ export default function InventairePage() {
                           >
                             +
                           </button>
-                          <span className="text-xs text-muted w-8">{item.unit}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2.5 text-center">
                         <select
-                          value={item.location || "placard"}
-                          onChange={(e) => updateLocation(item.id, e.target.value)}
+                          value={item.unit || "pcs"}
+                          onChange={(e) => updateUnit(item.id, e.target.value)}
                           className="text-xs bg-transparent border border-border rounded-lg px-2 py-1 cursor-pointer"
                         >
-                          {LOCATIONS.map((l) => (
-                            <option key={l.key} value={l.key}>
-                              {l.icon} {l.label}
-                            </option>
+                          {UNITS.map((u) => (
+                            <option key={u} value={u}>{u}</option>
                           ))}
                         </select>
                       </td>

@@ -16,27 +16,46 @@ export async function POST(request: Request) {
   let parsed: {
     store?: string;
     date: string;
-    items: { name: string; price: number }[];
+    items: { name: string; brand?: string; quantity?: number; unit?: string; price: number }[];
     total?: number;
   };
 
   if (!process.env.ANTHROPIC_API_KEY) {
     // Mock response when no API key
     parsed = {
-      store: "Supermarché",
+      store: "Carrefour",
       date: new Date().toISOString().split("T")[0],
       items: [
-        { name: "Produit exemple 1", price: 2.99 },
-        { name: "Produit exemple 2", price: 1.5 },
+        { name: "Pâtes Penne", brand: "Barilla", quantity: 500, unit: "g", price: 1.29 },
+        { name: "Lait demi-écrémé", brand: "Lactel", quantity: 1, unit: "L", price: 0.95 },
       ],
-      total: 4.49,
+      total: 2.24,
     };
   } else {
     const Anthropic = (await import("@anthropic-ai/sdk")).default;
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const systemPrompt =
-      'Tu es un assistant qui extrait les données d\'un ticket de caisse. Réponds UNIQUEMENT avec du JSON valide (pas de markdown). Format: {"store": "nom", "date": "YYYY-MM-DD", "items": [{"name": "produit", "price": 1.99}], "total": 10.50}';
+    const systemPrompt = `Tu es un assistant qui extrait les données d'un ticket de caisse. Réponds UNIQUEMENT avec du JSON valide (pas de markdown, pas de \`\`\`).
+Format attendu:
+{
+  "store": "nom du magasin",
+  "date": "YYYY-MM-DD",
+  "items": [
+    {
+      "name": "nom du produit (sans la marque)",
+      "brand": "marque si visible (sinon null)",
+      "quantity": 1.5,
+      "unit": "kg ou L ou g ou mL ou pcs (sinon null)",
+      "price": 1.99
+    }
+  ],
+  "total": 10.50
+}
+Règles:
+- Sépare le nom du produit de la marque. Ex: "Pâtes Penne Barilla 500g" → name: "Pâtes Penne", brand: "Barilla", quantity: 500, unit: "g"
+- Si la quantité/poids est indiqué sur le ticket, extrais-le
+- Le prix est le prix total payé pour cet article (pas le prix au kg)
+- Si un article a une quantité > 1 (ex: "x2"), mets la quantité correspondante`;
 
     type MediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
@@ -71,7 +90,7 @@ export async function POST(request: Request) {
       });
       content.push({
         type: "text",
-        text: "Extrais toutes les informations de ce ticket de caisse : magasin, date, liste des produits avec prix, et total.",
+        text: "Extrais toutes les informations de ce ticket de caisse : magasin, date, liste des produits avec marque, quantité, unité et prix, et total.",
       });
     } else {
       content.push({ type: "text", text: text });
@@ -99,9 +118,12 @@ export async function POST(request: Request) {
   const priceEntries = [];
   for (const item of parsed.items) {
     const entryResult = await query(
-      "INSERT INTO price_history (product_name, price, date, store, receipt_id) VALUES (?, ?, ?, ?, ?) RETURNING *",
+      "INSERT INTO price_history (product_name, brand, quantity, unit, price, date, store, receipt_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
       [
         item.name,
+        item.brand || null,
+        item.quantity || null,
+        item.unit || null,
         item.price,
         parsed.date,
         parsed.store || null,

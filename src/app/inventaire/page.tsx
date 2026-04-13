@@ -35,12 +35,13 @@ const LOCATIONS = [
   { key: "autre", label: "Autre", icon: "📦" },
 ] as const;
 
+const UNITS = ["pcs", "g", "kg", "ml", "L", "cl", "lot", "bout.", "boîte"];
+
 export default function InventairePage() {
   const { toast } = useToast();
   const [items, setItems] = useState<PantryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<"category" | "location">("category");
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("placard");
@@ -50,6 +51,16 @@ export default function InventairePage() {
   const [smartImage, setSmartImage] = useState<string | null>(null);
   const [smartLoading, setSmartLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+
+  // Custom product form
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customCategory, setCustomCategory] = useState("Épicerie");
+  const [customUnit, setCustomUnit] = useState("pcs");
+
+  // Sort
+  const [sortCol, setSortCol] = useState<"name" | "category" | "location" | "expiry">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     fetchPantry();
@@ -80,6 +91,47 @@ export default function InventairePage() {
       }),
     });
     fetchPantry();
+    toast(`${product.name} ajouté`);
+  };
+
+  const addCustomProduct = async () => {
+    if (!customName.trim()) return;
+    // Create product in DB
+    const prodRes = await fetch("/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: customName.trim(),
+        category: customCategory,
+        defaultUnit: customUnit,
+      }),
+    });
+    const newProduct = await prodRes.json();
+    if (newProduct.error) {
+      toast("Erreur lors de la création du produit", "error");
+      return;
+    }
+    // Add to pantry
+    await fetch("/api/pantry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productId: newProduct.id,
+        productName: newProduct.name,
+        quantity: 1,
+        unit: customUnit,
+        category: customCategory,
+        location: selectedLocation,
+      }),
+    });
+    // Refresh products list and pantry
+    const prodsRes = await fetch("/api/products");
+    const prods = await prodsRes.json();
+    setProducts(Array.isArray(prods) ? prods : []);
+    fetchPantry();
+    setCustomName("");
+    setShowCustomForm(false);
+    toast(`${customName.trim()} créé et ajouté`);
   };
 
   const updateQuantity = async (id: number, quantity: number) => {
@@ -97,6 +149,15 @@ export default function InventairePage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, location }),
+    });
+    fetchPantry();
+  };
+
+  const updateExpiry = async (id: number, expiresAt: string | null) => {
+    await fetch("/api/pantry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, expiresAt: expiresAt || null }),
     });
     fetchPantry();
   };
@@ -177,32 +238,29 @@ export default function InventairePage() {
   };
 
   const filteredItems = useMemo(() => {
-    if (!search) return items;
-    const s = search.toLowerCase();
-    return items.filter((i) => i.product_name.toLowerCase().includes(s));
-  }, [items, search]);
-
-  const groupedByCategory = useMemo(() => {
-    const groups: Record<string, PantryItem[]> = {};
-    for (const item of filteredItems) {
-      const key = item.category || "Autre";
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
+    let result = items;
+    if (search) {
+      const s = search.toLowerCase();
+      result = result.filter((i) => i.product_name.toLowerCase().includes(s));
     }
-    return groups;
-  }, [filteredItems]);
-
-  const groupedByLocation = useMemo(() => {
-    const groups: Record<string, PantryItem[]> = {};
-    for (const item of filteredItems) {
-      const key = item.location || "placard";
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    }
-    return groups;
-  }, [filteredItems]);
-
-  const grouped = viewMode === "category" ? groupedByCategory : groupedByLocation;
+    // Sort
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortCol === "name") {
+        cmp = a.product_name.localeCompare(b.product_name);
+      } else if (sortCol === "category") {
+        cmp = (a.category || "").localeCompare(b.category || "");
+      } else if (sortCol === "location") {
+        cmp = (a.location || "").localeCompare(b.location || "");
+      } else if (sortCol === "expiry") {
+        const ea = a.expiry_date || a.expires_at || "9999";
+        const eb = b.expiry_date || b.expires_at || "9999";
+        cmp = ea.localeCompare(eb);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [items, search, sortCol, sortDir]);
 
   const filteredProducts = useMemo(() => {
     if (!addSearch) return products.slice(0, 20);
@@ -215,11 +273,46 @@ export default function InventairePage() {
     [items]
   );
 
-  const locationLabel = (loc: string) =>
-    LOCATIONS.find((l) => l.key === loc) || { label: loc, icon: "📦" };
+  const handleSort = (col: typeof sortCol) => {
+    if (sortCol === col) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  };
+
+  const sortArrow = (col: typeof sortCol) =>
+    sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+
+  const getExpiryInfo = (item: PantryItem) => {
+    const exp = item.expiry_date || item.expires_at;
+    if (!exp) return null;
+    const days = Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000);
+    const color =
+      days < 0
+        ? "text-danger"
+        : days <= 3
+          ? "text-orange-500"
+          : days <= 7
+            ? "text-warning"
+            : "text-muted";
+    const label =
+      days < 0
+        ? `Périmé (${-days}j)`
+        : days === 0
+          ? "Aujourd'hui"
+          : days === 1
+            ? "Demain"
+            : `${days}j`;
+    return { days, color, label };
+  };
+
+  // Check if search has no results to show custom add
+  const noProductResults = addSearch.length >= 2 && filteredProducts.length === 0;
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 md:pb-0">
+    <div className="max-w-5xl mx-auto pb-20 md:pb-0">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold">Mon inventaire</h1>
@@ -240,7 +333,7 @@ export default function InventairePage() {
             onClick={() => { setShowAdd(!showAdd); setShowSmartAdd(false); }}
             className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
           >
-            {showAdd ? "Fermer" : "+ Manuel"}
+            {showAdd ? "Fermer" : "+ Ajouter"}
           </button>
         </div>
       </div>
@@ -248,7 +341,6 @@ export default function InventairePage() {
       {/* Smart add panel (photo / text / voice) */}
       {showSmartAdd && (
         <div className="mb-4 bg-card border-2 border-purple-200 rounded-xl p-4">
-          {/* Mode toggle */}
           <div className="flex gap-1 bg-background border border-border rounded-lg p-0.5 mb-4 w-fit">
             {([
               { key: "photo" as const, label: "Photo", icon: "📸" },
@@ -348,7 +440,11 @@ export default function InventairePage() {
             <input
               type="text"
               value={addSearch}
-              onChange={(e) => setAddSearch(e.target.value)}
+              onChange={(e) => {
+                setAddSearch(e.target.value);
+                // Pre-fill custom name
+                setCustomName(e.target.value);
+              }}
               placeholder="Rechercher un produit à ajouter..."
               className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               autoFocus
@@ -365,64 +461,123 @@ export default function InventairePage() {
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
-            {filteredProducts.map((product) => {
-              const inPantry = pantryProductIds.has(product.id);
-              return (
+
+          {/* Product grid */}
+          {filteredProducts.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto mb-3">
+              {filteredProducts.map((product) => {
+                const inPantry = pantryProductIds.has(product.id);
+                return (
+                  <button
+                    key={product.id}
+                    onClick={() => addItem(product)}
+                    className={`p-2.5 rounded-lg border text-left transition-all text-sm ${
+                      inPantry
+                        ? "bg-primary-light border-primary/30"
+                        : "bg-background border-border hover:border-primary"
+                    }`}
+                  >
+                    <span className="text-base">{product.icon || "🛒"}</span>
+                    <p className="font-medium text-xs mt-0.5 truncate">
+                      {product.name}
+                    </p>
+                    {inPantry && (
+                      <span className="text-xs text-primary">Déjà ajouté</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Custom product: show when no results or via button */}
+          {noProductResults && !showCustomForm && (
+            <button
+              onClick={() => setShowCustomForm(true)}
+              className="w-full py-3 border-2 border-dashed border-primary/40 rounded-xl text-sm font-medium text-primary hover:bg-primary-light transition-colors"
+            >
+              + Ajouter &quot;{addSearch}&quot; comme nouveau produit
+            </button>
+          )}
+
+          {!noProductResults && !showCustomForm && (
+            <button
+              onClick={() => setShowCustomForm(true)}
+              className="text-sm text-primary hover:underline"
+            >
+              Produit introuvable ? Ajouter un produit personnalisé
+            </button>
+          )}
+
+          {showCustomForm && (
+            <div className="bg-background border border-border rounded-xl p-4 space-y-3">
+              <h4 className="font-semibold text-sm">Nouveau produit</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs text-muted block mb-1">Nom</label>
+                  <input
+                    type="text"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    placeholder="Ex: Mozzarella"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted block mb-1">Catégorie</label>
+                  <select
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card"
+                  >
+                    {PRODUCT_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted block mb-1">Unité</label>
+                  <select
+                    value={customUnit}
+                    onChange={(e) => setCustomUnit(e.target.value)}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card"
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
                 <button
-                  key={product.id}
-                  onClick={() => addItem(product)}
-                  className={`p-2.5 rounded-lg border text-left transition-all text-sm ${
-                    inPantry
-                      ? "bg-primary-light border-primary/30"
-                      : "bg-background border-border hover:border-primary"
-                  }`}
+                  onClick={addCustomProduct}
+                  disabled={!customName.trim()}
+                  className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50 transition-colors"
                 >
-                  <span className="text-base">{product.icon || "🛒"}</span>
-                  <p className="font-medium text-xs mt-0.5 truncate">
-                    {product.name}
-                  </p>
-                  {inPantry && (
-                    <span className="text-xs text-primary">Déjà ajouté</span>
-                  )}
+                  Créer et ajouter
                 </button>
-              );
-            })}
-          </div>
+                <button
+                  onClick={() => setShowCustomForm(false)}
+                  className="px-4 py-2 text-sm text-muted hover:text-foreground"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Search + view toggle */}
-      <div className="flex gap-2 mb-4">
+      {/* Search */}
+      <div className="mb-4">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Rechercher dans mon inventaire..."
-          className="flex-1 bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
-        <div className="flex bg-card border border-border rounded-xl overflow-hidden">
-          <button
-            onClick={() => setViewMode("category")}
-            className={`px-3 py-2 text-sm font-medium transition-colors ${
-              viewMode === "category"
-                ? "bg-primary text-white"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            Rayon
-          </button>
-          <button
-            onClick={() => setViewMode("location")}
-            className={`px-3 py-2 text-sm font-medium transition-colors ${
-              viewMode === "location"
-                ? "bg-primary text-white"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            Lieu
-          </button>
-        </div>
       </div>
 
       {/* Summary cards */}
@@ -446,137 +601,132 @@ export default function InventairePage() {
         </div>
       )}
 
-      {/* Items list */}
+      {/* Table */}
       {items.length === 0 ? (
         <div className="text-center py-16 text-muted">
           <p className="text-5xl mb-4">📦</p>
           <p className="text-lg font-medium">Ton inventaire est vide</p>
           <p className="text-sm mt-1">
-            Clique sur &quot;+ Ajouter&quot; pour commencer à lister ce que tu as chez toi
+            Clique sur &quot;+ Ajouter&quot; pour commencer
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {Object.entries(grouped)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([group, groupItems]) => {
-              const loc = locationLabel(group);
-              return (
-                <div key={group}>
-                  <h3 className="text-sm font-semibold text-muted mb-2 flex items-center gap-2">
-                    {viewMode === "category" ? (
-                      <CategoryIcon
-                        category={group}
-                        size={16}
-                      />
-                    ) : (
-                      <span>{loc.icon}</span>
-                    )}
-                    {viewMode === "category" ? group : loc.label}
-                    <span className="text-xs font-normal">
-                      ({groupItems.length})
-                    </span>
-                  </h3>
-                  <div className="space-y-1">
-                    {groupItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3 group hover:shadow-sm transition-shadow"
-                      >
-                        <span className="text-lg">
-                          {item.icon || "🛒"}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {item.product_name}
-                          </p>
-                          {(item.expiry_date || item.expires_at) && (() => {
-                            const exp = item.expiry_date || item.expires_at;
-                            if (!exp) return null;
-                            const days = Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000);
-                            const color = days < 0 ? "text-danger" : days <= 3 ? "text-orange-500" : days <= 7 ? "text-warning" : "text-muted";
-                            const label = days < 0 ? `Périmé (${-days}j)` : days === 0 ? "Expire aujourd'hui" : days === 1 ? "Expire demain" : `Expire dans ${days}j`;
-                            return <p className={`text-[10px] font-medium ${color}`}>{label}</p>;
-                          })()}
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {viewMode === "category" && (
-                              <select
-                                value={item.location || "placard"}
-                                onChange={(e) =>
-                                  updateLocation(item.id, e.target.value)
-                                }
-                                className="text-xs bg-transparent border-none text-muted p-0 cursor-pointer"
-                              >
-                                {LOCATIONS.map((l) => (
-                                  <option key={l.key} value={l.key}>
-                                    {l.icon} {l.label}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                            {viewMode === "location" && item.category && (
-                              <span className="text-xs text-muted flex items-center gap-1">
-                                <CategoryIcon
-                                  category={item.category}
-                                  size={10}
-                                />
-                                {item.category}
-                              </span>
-                            )}
-                          </div>
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-card-hover">
+                  <th
+                    className="text-left px-4 py-2.5 font-medium cursor-pointer hover:text-primary select-none"
+                    onClick={() => handleSort("name")}
+                  >
+                    Produit{sortArrow("name")}
+                  </th>
+                  <th
+                    className="text-left px-3 py-2.5 font-medium cursor-pointer hover:text-primary select-none hidden sm:table-cell"
+                    onClick={() => handleSort("category")}
+                  >
+                    Catégorie{sortArrow("category")}
+                  </th>
+                  <th className="text-center px-3 py-2.5 font-medium">Quantité</th>
+                  <th
+                    className="text-left px-3 py-2.5 font-medium cursor-pointer hover:text-primary select-none"
+                    onClick={() => handleSort("location")}
+                  >
+                    Lieu{sortArrow("location")}
+                  </th>
+                  <th
+                    className="text-left px-3 py-2.5 font-medium cursor-pointer hover:text-primary select-none"
+                    onClick={() => handleSort("expiry")}
+                  >
+                    Péremption{sortArrow("expiry")}
+                  </th>
+                  <th className="text-center px-3 py-2.5 font-medium w-10"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredItems.map((item) => {
+                  const expiryInfo = getExpiryInfo(item);
+                  const expValue = item.expiry_date || item.expires_at || "";
+                  return (
+                    <tr key={item.id} className="hover:bg-card-hover group">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{item.icon || "🛒"}</span>
+                          <span className="font-medium">{item.product_name}</span>
                         </div>
-                        <div className="flex items-center gap-1">
+                      </td>
+                      <td className="px-3 py-2.5 hidden sm:table-cell">
+                        <span className="flex items-center gap-1 text-muted text-xs">
+                          <CategoryIcon category={item.category || "Autre"} size={12} />
+                          {item.category || "Autre"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-center gap-1">
                           <button
-                            onClick={() =>
-                              updateQuantity(
-                                item.id,
-                                (item.quantity || 1) - 1
-                              )
-                            }
-                            className="w-7 h-7 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger transition-colors"
+                            onClick={() => updateQuantity(item.id, (item.quantity || 1) - 1)}
+                            className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-danger-light hover:text-danger transition-colors"
                           >
                             -
                           </button>
-                          <span className="text-sm w-10 text-center font-semibold">
+                          <span className="w-10 text-center font-semibold">
                             {item.quantity || 1}
                           </span>
                           <button
-                            onClick={() =>
-                              updateQuantity(
-                                item.id,
-                                (item.quantity || 1) + 1
-                              )
-                            }
-                            className="w-7 h-7 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-primary-light hover:text-primary transition-colors"
+                            onClick={() => updateQuantity(item.id, (item.quantity || 1) + 1)}
+                            className="w-6 h-6 rounded-full bg-card-hover text-xs font-bold flex items-center justify-center hover:bg-primary-light hover:text-primary transition-colors"
                           >
                             +
                           </button>
-                          <span className="text-xs text-muted w-8">
-                            {item.unit}
-                          </span>
+                          <span className="text-xs text-muted w-8">{item.unit}</span>
                         </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <select
+                          value={item.location || "placard"}
+                          onChange={(e) => updateLocation(item.id, e.target.value)}
+                          className="text-xs bg-transparent border border-border rounded-lg px-2 py-1 cursor-pointer"
+                        >
+                          {LOCATIONS.map((l) => (
+                            <option key={l.key} value={l.key}>
+                              {l.icon} {l.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={expValue}
+                            onChange={(e) => updateExpiry(item.id, e.target.value || null)}
+                            className="text-xs bg-transparent border border-border rounded-lg px-2 py-1 w-32"
+                          />
+                          {expiryInfo && (
+                            <span className={`text-[10px] font-semibold whitespace-nowrap ${expiryInfo.color}`}>
+                              {expiryInfo.label}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
                         <button
                           onClick={() => removeItem(item.id)}
                           className="text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <line x1="18" y1="6" x2="6" y2="18" />
                             <line x1="6" y1="6" x2="18" y2="18" />
                           </svg>
                         </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

@@ -1313,6 +1313,9 @@ async function migrate() {
     "ALTER TABLE products ADD COLUMN sort_order INTEGER DEFAULT 100",
     "ALTER TABLE products ADD COLUMN default_quantity REAL DEFAULT 1",
     "ALTER TABLE products ADD COLUMN quantity_presets TEXT",
+    "ALTER TABLE price_history ADD COLUMN brand TEXT",
+    "ALTER TABLE price_history ADD COLUMN quantity REAL",
+    "ALTER TABLE price_history ADD COLUMN unit TEXT",
   ];
 
   for (const q of alterQueries) {

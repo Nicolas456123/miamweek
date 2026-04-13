@@ -5,6 +5,9 @@ import { useState, useEffect } from "react";
 type PriceEntry = {
   id: number;
   productName: string;
+  brand: string | null;
+  quantity: number | null;
+  unit: string | null;
   price: number;
   date: string;
   store: string | null;
@@ -15,6 +18,7 @@ type Receipt = {
   date: string;
   store: string | null;
   total: number | null;
+  item_count: number | null;
 };
 
 type StockItem = {
@@ -36,6 +40,8 @@ export default function SuiviPage() {
   const [ticketText, setTicketText] = useState("");
   const [ticketImage, setTicketImage] = useState<string | null>(null);
   const [scanMode, setScanMode] = useState<"text" | "photo">("photo");
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [receiptItems, setReceiptItems] = useState<PriceEntry[]>([]);
 
   useEffect(() => {
     if (tab === "stock") {
@@ -95,6 +101,18 @@ export default function SuiviPage() {
       setTicketImage(reader.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  const openReceipt = async (receipt: Receipt) => {
+    setSelectedReceipt(receipt);
+    try {
+      const res = await fetch(`/api/receipts?receiptId=${receipt.id}`);
+      const data = await res.json();
+      setReceiptItems(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setReceiptItems([]);
+    }
   };
 
   const updateStockStatus = async (id: number, status: string) => {
@@ -215,6 +233,8 @@ export default function SuiviPage() {
                     <th className="text-left px-4 py-2 font-medium">
                       Produit
                     </th>
+                    <th className="text-left px-4 py-2 font-medium">Marque</th>
+                    <th className="text-right px-4 py-2 font-medium">Qté</th>
                     <th className="text-right px-4 py-2 font-medium">Prix</th>
                     <th className="text-right px-4 py-2 font-medium">Date</th>
                     <th className="text-right px-4 py-2 font-medium">
@@ -226,6 +246,16 @@ export default function SuiviPage() {
                   {prices.map((p) => (
                     <tr key={p.id} className="hover:bg-card-hover">
                       <td className="px-4 py-2">{p.productName}</td>
+                      <td className="px-4 py-2 text-muted">
+                        {p.brand || "-"}
+                      </td>
+                      <td className="px-4 py-2 text-right text-muted">
+                        {p.quantity && p.unit
+                          ? `${p.quantity} ${p.unit}`
+                          : p.quantity
+                            ? `x${p.quantity}`
+                            : "-"}
+                      </td>
                       <td className="px-4 py-2 text-right font-medium">
                         {p.price.toFixed(2)} EUR
                       </td>
@@ -349,31 +379,113 @@ export default function SuiviPage() {
             </button>
           </div>
 
-          {/* Receipts list */}
-          {receipts.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-semibold">Historique des tickets</h3>
-              {receipts.map((r) => (
-                <div
-                  key={r.id}
-                  className="bg-card border border-border rounded-xl p-4 flex items-center gap-3"
-                >
-                  <div className="text-2xl">🧾</div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">
-                      {r.store || "Magasin inconnu"}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {new Date(r.date).toLocaleDateString("fr-FR")}
-                    </p>
-                  </div>
-                  {r.total && (
-                    <span className="font-semibold text-sm">
-                      {r.total.toFixed(2)} EUR
-                    </span>
-                  )}
+          {/* Receipt detail */}
+          {selectedReceipt && (
+            <div className="bg-card border border-border rounded-xl overflow-hidden mb-4">
+              <div className="flex items-center justify-between px-4 py-3 bg-card-hover border-b border-border">
+                <div>
+                  <h3 className="font-semibold">
+                    {selectedReceipt.store || "Magasin inconnu"}
+                  </h3>
+                  <p className="text-xs text-muted">
+                    {new Date(selectedReceipt.date).toLocaleDateString("fr-FR")}
+                    {selectedReceipt.total && (
+                      <span className="ml-2 font-medium text-foreground">
+                        Total : {selectedReceipt.total.toFixed(2)} EUR
+                      </span>
+                    )}
+                  </p>
                 </div>
-              ))}
+                <button
+                  onClick={() => { setSelectedReceipt(null); setReceiptItems([]); }}
+                  className="w-8 h-8 rounded-lg bg-card-hover text-muted hover:text-foreground flex items-center justify-center text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+              {receiptItems.length === 0 ? (
+                <p className="text-sm text-muted p-4">Chargement...</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-card-hover/50">
+                        <th className="text-left px-4 py-2 font-medium">Produit</th>
+                        <th className="text-left px-3 py-2 font-medium">Marque</th>
+                        <th className="text-right px-3 py-2 font-medium">Quantité</th>
+                        <th className="text-right px-4 py-2 font-medium">Prix</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {receiptItems.map((item) => (
+                        <tr key={item.id} className="hover:bg-card-hover">
+                          <td className="px-4 py-2 font-medium">{item.productName}</td>
+                          <td className="px-3 py-2 text-muted">{item.brand || "-"}</td>
+                          <td className="px-3 py-2 text-right text-muted">
+                            {item.quantity && item.unit
+                              ? `${item.quantity} ${item.unit}`
+                              : item.quantity
+                                ? `x${item.quantity}`
+                                : "-"}
+                          </td>
+                          <td className="px-4 py-2 text-right font-semibold">
+                            {item.price.toFixed(2)} EUR
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Receipts list as table */}
+          {receipts.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2">Historique des tickets</h3>
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-card-hover">
+                        <th className="text-left px-4 py-2.5 font-medium">Date</th>
+                        <th className="text-left px-3 py-2.5 font-medium">Magasin</th>
+                        <th className="text-right px-3 py-2.5 font-medium">Articles</th>
+                        <th className="text-right px-3 py-2.5 font-medium">Total</th>
+                        <th className="text-center px-3 py-2.5 font-medium w-16"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {receipts.map((r) => (
+                        <tr
+                          key={r.id}
+                          className={`hover:bg-card-hover cursor-pointer transition-colors ${
+                            selectedReceipt?.id === r.id ? "bg-primary-light" : ""
+                          }`}
+                          onClick={() => openReceipt(r)}
+                        >
+                          <td className="px-4 py-2.5">
+                            {new Date(r.date).toLocaleDateString("fr-FR")}
+                          </td>
+                          <td className="px-3 py-2.5 font-medium">
+                            {r.store || "Inconnu"}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-muted">
+                            {r.item_count || "-"}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-semibold">
+                            {r.total ? `${r.total.toFixed(2)} EUR` : "-"}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className="text-primary text-xs font-medium">Voir</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
         </div>

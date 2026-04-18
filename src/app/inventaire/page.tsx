@@ -24,6 +24,8 @@ type PantryItem = {
   added_at: string | null;
   expires_at: string | null;
   expiry_date: string | null;
+  opened_at: string | null;
+  shelf_life_after_open_days: number | null;
   icon: string | null;
   defaultUnit: string | null;
 };
@@ -152,6 +154,29 @@ export default function InventairePage() {
     fetchPantry();
   };
 
+  const updateOpened = async (id: number, openedAt: string | null) => {
+    await fetch("/api/pantry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, openedAt: openedAt || null }),
+    });
+    fetchPantry();
+  };
+
+  const updateShelfLife = async (id: number, days: number | null) => {
+    await fetch("/api/pantry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, shelfLifeAfterOpenDays: days }),
+    });
+    fetchPantry();
+  };
+
+  const markOpenedToday = (item: PantryItem) => {
+    const today = new Date().toISOString().slice(0, 10);
+    updateOpened(item.id, today);
+  };
+
   const removeItem = async (id: number) => {
     await fetch("/api/pantry", {
       method: "DELETE",
@@ -275,8 +300,23 @@ export default function InventairePage() {
 
   const getExpiryInfo = (item: PantryItem) => {
     const exp = item.expiry_date || item.expires_at;
-    if (!exp) return null;
-    const days = Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000);
+    const openedAt = item.opened_at;
+    const shelfLife = item.shelf_life_after_open_days;
+
+    // Effective expiry = min(expires_at, opened_at + shelf_life_after_open_days)
+    let effective: Date | null = exp ? new Date(exp) : null;
+    let fromOpening = false;
+    if (openedAt && shelfLife != null) {
+      const openedExpiry = new Date(openedAt);
+      openedExpiry.setDate(openedExpiry.getDate() + shelfLife);
+      if (!effective || openedExpiry < effective) {
+        effective = openedExpiry;
+        fromOpening = true;
+      }
+    }
+    if (!effective) return null;
+
+    const days = Math.ceil((effective.getTime() - Date.now()) / 86400000);
     const color =
       days < 0
         ? "text-danger"
@@ -293,7 +333,12 @@ export default function InventairePage() {
           : days === 1
             ? "Demain"
             : `${days}j`;
-    return { days, color, label };
+    return { days, color, label, fromOpening };
+  };
+
+  const daysSinceOpened = (openedAt: string | null) => {
+    if (!openedAt) return null;
+    return Math.floor((Date.now() - new Date(openedAt).getTime()) / 86400000);
   };
 
   // Check if search has no results to show custom add
@@ -644,17 +689,62 @@ export default function InventairePage() {
                         </select>
                       </td>
                       <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="date"
-                            value={expValue}
-                            onChange={(e) => updateExpiry(item.id, e.target.value || null)}
-                            className="text-xs bg-transparent border border-border rounded-lg px-2 py-1 w-32"
-                          />
-                          {expiryInfo && (
-                            <span className={`text-[10px] font-semibold whitespace-nowrap ${expiryInfo.color}`}>
-                              {expiryInfo.label}
-                            </span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={expValue}
+                              onChange={(e) => updateExpiry(item.id, e.target.value || null)}
+                              className="text-xs bg-transparent border border-border rounded-lg px-2 py-1 w-32"
+                            />
+                            {expiryInfo && (
+                              <span className={`text-[10px] font-semibold whitespace-nowrap ${expiryInfo.color}`}>
+                                {expiryInfo.label}
+                                {expiryInfo.fromOpening && " (ouvert)"}
+                              </span>
+                            )}
+                          </div>
+                          {item.opened_at ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium"
+                                title={`Ouvert le ${item.opened_at}`}
+                              >
+                                Ouvert {(() => {
+                                  const d = daysSinceOpened(item.opened_at);
+                                  return d === 0 ? "aujourd'hui" : d === 1 ? "hier" : `il y a ${d}j`;
+                                })()}
+                              </span>
+                              <input
+                                type="number"
+                                min={1}
+                                placeholder="jours après ouv."
+                                value={item.shelf_life_after_open_days ?? ""}
+                                onChange={(e) =>
+                                  updateShelfLife(
+                                    item.id,
+                                    e.target.value ? Number(e.target.value) : null
+                                  )
+                                }
+                                className="text-[10px] bg-transparent border border-border rounded px-1 py-0.5 w-14"
+                                title="Durée en jours après ouverture"
+                              />
+                              <button
+                                onClick={() => updateOpened(item.id, null)}
+                                className="text-[10px] text-muted hover:text-danger"
+                                title="Annuler l'ouverture"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => markOpenedToday(item)}
+                              className="text-[10px] text-muted hover:text-orange-600 self-start"
+                              title="Marquer comme ouvert aujourd'hui"
+                            >
+                              🔓 Marquer ouvert
+                            </button>
                           )}
                         </div>
                       </td>

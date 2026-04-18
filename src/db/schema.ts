@@ -110,6 +110,8 @@ export const pantryItems = sqliteTable("pantry_items", {
   location: text("location"), // "frigo" | "placard" | "congélateur" | "autre"
   addedAt: text("added_at").default("CURRENT_TIMESTAMP"),
   expiresAt: text("expires_at"),
+  openedAt: text("opened_at"),
+  shelfLifeAfterOpenDays: integer("shelf_life_after_open_days"),
 });
 
 // ── Food preferences ─────────────────────────────────────────────────

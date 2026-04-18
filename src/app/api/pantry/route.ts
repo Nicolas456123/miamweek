@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, quantity, unit, location, expiresAt } = body;
+    const { id, quantity, unit, location, expiresAt, openedAt, shelfLifeAfterOpenDays } = body;
 
     if (!id) {
       return Response.json({ error: "id is required" }, { status: 400 });
@@ -102,6 +102,14 @@ export async function PUT(request: Request) {
     if (expiresAt !== undefined) {
       updates.push("expires_at = ?");
       args.push(expiresAt);
+    }
+    if (openedAt !== undefined) {
+      updates.push("opened_at = ?");
+      args.push(openedAt);
+    }
+    if (shelfLifeAfterOpenDays !== undefined) {
+      updates.push("shelf_life_after_open_days = ?");
+      args.push(shelfLifeAfterOpenDays);
     }
 
     if (updates.length === 0) {

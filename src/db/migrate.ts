@@ -1316,6 +1316,8 @@ async function migrate() {
     "ALTER TABLE price_history ADD COLUMN brand TEXT",
     "ALTER TABLE price_history ADD COLUMN quantity REAL",
     "ALTER TABLE price_history ADD COLUMN unit TEXT",
+    "ALTER TABLE pantry_items ADD COLUMN opened_at TEXT",
+    "ALTER TABLE pantry_items ADD COLUMN shelf_life_after_open_days INTEGER",
   ];
 
   for (const q of alterQueries) {

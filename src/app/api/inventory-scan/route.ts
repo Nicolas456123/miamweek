@@ -9,8 +9,7 @@ type ScannedItem = {
   expiry: string | null;
   packageSize?: number | null; // en g ou ml
   brand?: string | null;
-  openedCount?: number; // nb d'exemplaires ouverts (0 par défaut)
-  openedAt?: string | null; // ISO local "YYYY-MM-DDTHH:mm:ss"
+  openedAt?: string | null; // ISO local "YYYY-MM-DDTHH:mm:ss" — null si fermé
   shelfLifeAfterOpenDays?: number | null;
   category?: string | null;
   location?: string | null;
@@ -24,15 +23,28 @@ const MOCK_PHOTO_RESULT: ScannedItem[] = [
 ];
 
 function buildMockTextResult(todayISO: string): ScannedItem[] {
+  // Démo : "3 briques de crème fraîche semi-épaisse de 20 cl dont une ouverte aujourd'hui à 12h30"
+  // Unité volumétrique (cl) préférée au contenant (brique). quantity = volume total du groupe.
   return [
     {
       name: "Crème fraîche semi-épaisse",
-      quantity: 3,
-      unit: "brique",
+      quantity: 40, // 2 briques × 20 cl fermées
+      unit: "cl",
       packageSize: 200,
       brand: null,
       expiry: null,
-      openedCount: 1,
+      openedAt: null,
+      shelfLifeAfterOpenDays: null,
+      category: "Produits laitiers",
+      location: "frigo",
+    },
+    {
+      name: "Crème fraîche semi-épaisse",
+      quantity: 20, // 1 brique × 20 cl ouverte
+      unit: "cl",
+      packageSize: 200,
+      brand: null,
+      expiry: null,
       openedAt: `${todayISO}T12:30:00`,
       shelfLifeAfterOpenDays: 3,
       category: "Produits laitiers",
@@ -78,14 +90,13 @@ export async function POST(request: Request) {
 
       const jsonSchema = `[{
   "name": "Nom normalisé du produit (ex: Crème fraîche semi-épaisse)",
-  "quantity": 3,                         // nombre total d'exemplaires
-  "unit": "brique",                      // pcs, brique, pot, bout., boîte, sachet, tube, flacon, lot, roul., g, kg, ml, L, cl
+  "quantity": 40,                        // quantité du groupe dans "unit" (pour 2 briques de 20 cl → 40 si unit=cl)
+  "unit": "cl",                          // PRIORITÉ à l'unité de mesure (cl, ml, L, g, kg). Contenant (pcs, brique, pot, bout., boîte, sachet, tube, flacon, lot, roul.) seulement si aucune mesure donnée.
   "packageSize": 200,                    // taille d'UN exemplaire EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g). null si inconnu.
   "brand": null,                         // marque si explicitement mentionnée, sinon null
   "expiry": null,                        // DLC format YYYY-MM-DD, null si non mentionnée
-  "openedCount": 1,                      // nombre d'exemplaires déjà OUVERTS (0 si aucun)
-  "openedAt": "2026-04-18T12:30:00",    // date+heure d'ouverture ISO locale, null si openedCount=0
-  "shelfLifeAfterOpenDays": 3,           // jours après ouverture (estime selon le produit), null si non pertinent
+  "openedAt": null,                      // date+heure d'ouverture ISO locale pour CE groupe, ou null si fermé
+  "shelfLifeAfterOpenDays": null,        // jours après ouverture (estime), null si groupe fermé ou non pertinent
   "category": "Produits laitiers",       // Fruits & Légumes, Viandes & Poissons, Produits laitiers, Épicerie, Boissons, Surgelés, Épices & Condiments, Autre
   "location": "frigo"                    // frigo, placard, congélateur
 }]`;
@@ -102,9 +113,10 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown, pas de texte avant/après):
 ${jsonSchema}
 
 Règles strictes:
-- packageSize toujours en g OU ml (pas d'autre unité). Ex: "20 cl" → 200, "1 L" → 1000, "500 g" → 500.
+- UNITÉ PRIORITAIRE: si la photo indique un volume/poids (cl, ml, L, g, kg), utilise CETTE unité et NON le type de contenant.
+- quantity = total du groupe. Ex: 2 bouteilles de 1 L visibles → {quantity:2000, unit:"ml"} ou {quantity:2, unit:"L"}.
+- packageSize = taille d'UN contenant EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g).
 - Si rien n'est ouvert, openedCount=0 et openedAt=null.
-- Si l'utilisateur dit "aujourd'hui à 12h30", convertis en "${todayISO}T12:30:00".
 - Estime shelfLifeAfterOpenDays seulement pour produits périssables ouverts (lait ouvert: 3j, crème fraîche: 3-5j, jus: 5j, yaourt: ne se garde pas ouvert).`;
 
         const base64 = image.replace(/^data:image\/\w+;base64,/, "");
@@ -125,12 +137,15 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown, pas de texte avant/après):
 ${jsonSchema}
 
 Règles strictes:
-- packageSize toujours en g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g, 1 dl = 100 ml).
-- "3 briques de 20 cl dont une ouverte aujourd'hui à 12h30" → quantity=3, unit="brique", packageSize=200, openedCount=1, openedAt="${todayISO}T12:30:00".
-- "aujourd'hui" = ${todayISO}. "hier" = date d'hier. Les heures "12h30", "14h", "à 8 heures" sont à convertir en HH:mm:ss.
-- Si rien n'est ouvert : openedCount=0, openedAt=null.
-- Estime shelfLifeAfterOpenDays seulement pour produits périssables ouverts (lait/crème: 3-5j, jus: 5j, etc.).
-- Si plusieurs produits différents sont mentionnés, renvoie un objet par produit.`;
+- UNITÉ PRIORITAIRE: quand une mesure (cl, ml, L, g, kg) est donnée, utilise CETTE unité et NON le contenant ("brique", "pot", etc.). Le contenant n'est utilisé QUE si aucune mesure n'est donnée.
+- UN OBJET PAR GROUPE OUVERT/FERMÉ. Pour "3 briques de 20 cl dont 1 ouverte aujourd'hui à 12h30" → renvoie 2 objets :
+  1. Groupe fermé : {"quantity":40,"unit":"cl","packageSize":200,"openedAt":null}
+  2. Groupe ouvert : {"quantity":20,"unit":"cl","packageSize":200,"openedAt":"${todayISO}T12:30:00","shelfLifeAfterOpenDays":3}
+- Si rien n'est ouvert → UN SEUL objet avec openedAt=null.
+- packageSize = taille d'UN seul contenant EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g, 1 dl = 100 ml).
+- "aujourd'hui" = ${todayISO}. "hier" = date d'hier. "12h30", "14h", "à 8 heures" → HH:mm:ss.
+- Estime shelfLifeAfterOpenDays seulement pour les groupes ouverts (lait/crème: 3-5j, jus: 5j, etc.).
+- Si plusieurs produits différents sont mentionnés, renvoie un objet par groupe par produit.`;
         userContent = text;
       }
 
@@ -158,7 +173,7 @@ Règles strictes:
       }
     }
 
-    // Sauvegarde dans pantry_items (en splittant ouverts/non-ouverts)
+    // Sauvegarde dans pantry_items : chaque item IA = une ligne (déjà splittée par groupe)
     const saved: Array<Record<string, unknown>> = [];
     for (const item of items) {
       const productResult = await query(
@@ -172,44 +187,34 @@ Règles strictes:
 
       const category = item.category || productCategory || "Autre";
       const location = item.location || (isPerishable(item.name) ? "frigo" : "placard");
-      const openedCount = Math.max(0, Math.min(item.openedCount || 0, item.quantity));
-      const closedCount = item.quantity - openedCount;
 
-      const groups: Array<{ qty: number; openedAt: string | null }> = [];
-      if (closedCount > 0) groups.push({ qty: closedCount, openedAt: null });
-      if (openedCount > 0) {
-        groups.push({ qty: openedCount, openedAt: item.openedAt || `${todayISO}T00:00:00` });
-      }
-
-      for (const group of groups) {
-        await query(
-          `INSERT INTO pantry_items
-            (product_id, product_name, quantity, unit, category, location,
-             expires_at, opened_at, shelf_life_after_open_days, package_size, brand)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            productId,
-            item.name,
-            group.qty,
-            item.unit,
-            category,
-            location,
-            item.expiry || null,
-            group.openedAt,
-            item.shelfLifeAfterOpenDays ?? null,
-            item.packageSize ?? null,
-            item.brand ?? null,
-          ]
-        );
-        saved.push({
-          name: item.name,
-          quantity: group.qty,
-          unit: item.unit,
-          openedAt: group.openedAt,
-          packageSize: item.packageSize ?? null,
-          brand: item.brand ?? null,
-        });
-      }
+      await query(
+        `INSERT INTO pantry_items
+          (product_id, product_name, quantity, unit, category, location,
+           expires_at, opened_at, shelf_life_after_open_days, package_size, brand)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          productId,
+          item.name,
+          item.quantity,
+          item.unit,
+          category,
+          location,
+          item.expiry || null,
+          item.openedAt ?? null,
+          item.shelfLifeAfterOpenDays ?? null,
+          item.packageSize ?? null,
+          item.brand ?? null,
+        ]
+      );
+      saved.push({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        openedAt: item.openedAt ?? null,
+        packageSize: item.packageSize ?? null,
+        brand: item.brand ?? null,
+      });
     }
 
     return Response.json({ items: saved, count: saved.length });

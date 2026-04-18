@@ -39,7 +39,10 @@ type PantryItem = {
   default_brand: string | null;
 };
 
-const UNITS = ["pcs", "g", "kg", "ml", "L", "cl", "lot", "bout.", "boîte"];
+const UNITS = [
+  "pcs", "g", "kg", "ml", "L", "cl", "lot", "bout.", "boîte",
+  "brique", "pot", "barquette", "sachet", "tube", "flacon", "roul.",
+];
 
 export default function InventairePage() {
   const { toast } = useToast();
@@ -494,12 +497,12 @@ export default function InventairePage() {
           {smartMode === "text" && (
             <div>
               <p className="text-sm text-muted mb-3">
-                Décris ce que tu as : &quot;j&apos;ai du lait, 6 oeufs, du beurre, 2 yaourts...&quot;
+                Décris librement : grammage, marque, ce qui est ouvert et quand. Ex : &quot;3 briques de crème fraîche semi-épaisse 20 cl dont une ouverte aujourd&apos;hui à 12h30&quot;.
               </p>
               <textarea
                 value={smartText}
                 onChange={(e) => setSmartText(e.target.value)}
-                placeholder="J'ai du poivre, 2 oeufs, du lait, de la farine..."
+                placeholder="Ex : 2 packs de lait demi-écrémé 1L marque Lactel, 6 oeufs bio, 1 pot de yaourt nature 500g ouvert hier"
                 rows={3}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background mb-3 focus:outline-none focus:ring-2 focus:ring-purple-300"
               />

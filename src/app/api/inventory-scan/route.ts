@@ -28,9 +28,9 @@ function buildMockTextResult(todayISO: string): ScannedItem[] {
   return [
     {
       name: "Crème fraîche semi-épaisse",
-      quantity: 40, // 2 briques × 20 cl fermées
-      unit: "cl",
-      packageSize: 200,
+      quantity: 2, // 2 briques fermées
+      unit: "brique",
+      packageSize: 200, // 20 cl = 200 ml par brique
       brand: null,
       expiry: null,
       openedAt: null,
@@ -40,8 +40,8 @@ function buildMockTextResult(todayISO: string): ScannedItem[] {
     },
     {
       name: "Crème fraîche semi-épaisse",
-      quantity: 20, // 1 brique × 20 cl ouverte
-      unit: "cl",
+      quantity: 1, // 1 brique ouverte
+      unit: "brique",
       packageSize: 200,
       brand: null,
       expiry: null,
@@ -90,9 +90,9 @@ export async function POST(request: Request) {
 
       const jsonSchema = `[{
   "name": "Nom normalisé du produit (ex: Crème fraîche semi-épaisse)",
-  "quantity": 40,                        // quantité du groupe dans "unit" (pour 2 briques de 20 cl → 40 si unit=cl)
-  "unit": "cl",                          // PRIORITÉ à l'unité de mesure (cl, ml, L, g, kg). Contenant (pcs, brique, pot, bout., boîte, sachet, tube, flacon, lot, roul.) seulement si aucune mesure donnée.
-  "packageSize": 200,                    // taille d'UN exemplaire EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g). null si inconnu.
+  "quantity": 2,                         // NOMBRE d'exemplaires dans ce groupe (pas le volume total)
+  "unit": "brique",                      // type de contenant : brique, pot, bout., boîte, sachet, tube, flacon, lot, roul., pcs. Utilise g/kg/ml/L/cl UNIQUEMENT si le produit est vendu au poids/volume sans contenant (ex: 500g de farine en vrac).
+  "packageSize": 200,                    // taille d'UN exemplaire EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g, 1 dl = 100 ml). null si inconnu.
   "brand": null,                         // marque si explicitement mentionnée, sinon null
   "expiry": null,                        // DLC format YYYY-MM-DD, null si non mentionnée
   "openedAt": null,                      // date+heure d'ouverture ISO locale pour CE groupe, ou null si fermé
@@ -113,10 +113,9 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown, pas de texte avant/après):
 ${jsonSchema}
 
 Règles strictes:
-- UNITÉ PRIORITAIRE: si la photo indique un volume/poids (cl, ml, L, g, kg), utilise CETTE unité et NON le type de contenant.
-- quantity = total du groupe. Ex: 2 bouteilles de 1 L visibles → {quantity:2000, unit:"ml"} ou {quantity:2, unit:"L"}.
-- packageSize = taille d'UN contenant EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g).
-- Si rien n'est ouvert, openedCount=0 et openedAt=null.
+- quantity = NOMBRE d'exemplaires visibles (pas le volume total). unit = type de CONTENANT (brique, pot, bout., boîte, sachet, tube, flacon, pcs).
+- packageSize = taille d'UN contenant EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g). Ex: 2 bouteilles de 1 L → {quantity:2, unit:"bout.", packageSize:1000}.
+- Si rien n'est ouvert, openedAt=null.
 - Estime shelfLifeAfterOpenDays seulement pour produits périssables ouverts (lait ouvert: 3j, crème fraîche: 3-5j, jus: 5j, yaourt: ne se garde pas ouvert).`;
 
         const base64 = image.replace(/^data:image\/\w+;base64,/, "");
@@ -137,12 +136,13 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown, pas de texte avant/après):
 ${jsonSchema}
 
 Règles strictes:
-- UNITÉ PRIORITAIRE: quand une mesure (cl, ml, L, g, kg) est donnée, utilise CETTE unité et NON le contenant ("brique", "pot", etc.). Le contenant n'est utilisé QUE si aucune mesure n'est donnée.
+- quantity = NOMBRE d'exemplaires (pas le volume total). unit = type de CONTENANT (brique, pot, bout., boîte, sachet, tube, flacon...). packageSize = taille d'UN contenant en g OU ml.
 - UN OBJET PAR GROUPE OUVERT/FERMÉ. Pour "3 briques de 20 cl dont 1 ouverte aujourd'hui à 12h30" → renvoie 2 objets :
-  1. Groupe fermé : {"quantity":40,"unit":"cl","packageSize":200,"openedAt":null}
-  2. Groupe ouvert : {"quantity":20,"unit":"cl","packageSize":200,"openedAt":"${todayISO}T12:30:00","shelfLifeAfterOpenDays":3}
+  1. Fermé : {"quantity":2,"unit":"brique","packageSize":200,"openedAt":null}
+  2. Ouvert : {"quantity":1,"unit":"brique","packageSize":200,"openedAt":"${todayISO}T12:30:00","shelfLifeAfterOpenDays":3}
 - Si rien n'est ouvert → UN SEUL objet avec openedAt=null.
-- packageSize = taille d'UN seul contenant EN g OU ml (1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g, 1 dl = 100 ml).
+- Utilise g/kg/ml/L/cl comme unit UNIQUEMENT pour produits vendus au poids/volume sans contenant identifiable (ex: 500g de farine en vrac, 1kg de tomates).
+- Conversions packageSize : 1 cl = 10 ml, 1 L = 1000 ml, 1 kg = 1000 g, 1 dl = 100 ml.
 - "aujourd'hui" = ${todayISO}. "hier" = date d'hier. "12h30", "14h", "à 8 heures" → HH:mm:ss.
 - Estime shelfLifeAfterOpenDays seulement pour les groupes ouverts (lait/crème: 3-5j, jus: 5j, etc.).
 - Si plusieurs produits différents sont mentionnés, renvoie un objet par groupe par produit.`;

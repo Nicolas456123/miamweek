@@ -1318,6 +1318,15 @@ async function migrate() {
     "ALTER TABLE price_history ADD COLUMN unit TEXT",
     "ALTER TABLE pantry_items ADD COLUMN opened_at TEXT",
     "ALTER TABLE pantry_items ADD COLUMN shelf_life_after_open_days INTEGER",
+    "ALTER TABLE pantry_items ADD COLUMN package_size REAL",
+    "ALTER TABLE pantry_items ADD COLUMN brand TEXT",
+    "ALTER TABLE products ADD COLUMN kcal_per_100 REAL",
+    "ALTER TABLE products ADD COLUMN protein_per_100 REAL",
+    "ALTER TABLE products ADD COLUMN carbs_per_100 REAL",
+    "ALTER TABLE products ADD COLUMN fat_per_100 REAL",
+    "ALTER TABLE products ADD COLUMN fiber_per_100 REAL",
+    "ALTER TABLE products ADD COLUMN default_package_size REAL",
+    "ALTER TABLE products ADD COLUMN default_brand TEXT",
   ];
 
   for (const q of alterQueries) {

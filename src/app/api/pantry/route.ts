@@ -5,7 +5,9 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const result = await query(
-      `SELECT p.*, pr.icon, pr.default_unit as defaultUnit
+      `SELECT p.*, pr.icon, pr.default_unit as defaultUnit,
+              pr.kcal_per_100, pr.protein_per_100, pr.carbs_per_100, pr.fat_per_100, pr.fiber_per_100,
+              pr.default_package_size, pr.default_brand
        FROM pantry_items p
        LEFT JOIN products pr ON p.product_id = pr.id
        ORDER BY p.category ASC, p.product_name ASC`
@@ -78,7 +80,17 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, quantity, unit, location, expiresAt, openedAt, shelfLifeAfterOpenDays } = body;
+    const {
+      id,
+      quantity,
+      unit,
+      location,
+      expiresAt,
+      openedAt,
+      shelfLifeAfterOpenDays,
+      packageSize,
+      brand,
+    } = body;
 
     if (!id) {
       return Response.json({ error: "id is required" }, { status: 400 });
@@ -110,6 +122,14 @@ export async function PUT(request: Request) {
     if (shelfLifeAfterOpenDays !== undefined) {
       updates.push("shelf_life_after_open_days = ?");
       args.push(shelfLifeAfterOpenDays);
+    }
+    if (packageSize !== undefined) {
+      updates.push("package_size = ?");
+      args.push(packageSize);
+    }
+    if (brand !== undefined) {
+      updates.push("brand = ?");
+      args.push(brand);
     }
 
     if (updates.length === 0) {

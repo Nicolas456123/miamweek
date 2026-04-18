@@ -53,6 +53,15 @@ export const products = sqliteTable("products", {
   icon: text("icon"),
   isCustom: integer("is_custom", { mode: "boolean" }).default(false),
   createdAt: text("created_at").default("CURRENT_TIMESTAMP"),
+  // Nutrition (base commune, per 100 g/ml)
+  kcalPer100: real("kcal_per_100"),
+  proteinPer100: real("protein_per_100"),
+  carbsPer100: real("carbs_per_100"),
+  fatPer100: real("fat_per_100"),
+  fiberPer100: real("fiber_per_100"),
+  // Emballage par défaut (taille typique en g/ml)
+  defaultPackageSize: real("default_package_size"),
+  defaultBrand: text("default_brand"),
 });
 
 // ── Shopping list items (2-phase: prep -> active -> done) ─────────────
@@ -112,6 +121,9 @@ export const pantryItems = sqliteTable("pantry_items", {
   expiresAt: text("expires_at"),
   openedAt: text("opened_at"),
   shelfLifeAfterOpenDays: integer("shelf_life_after_open_days"),
+  // Overrides éventuels par instance
+  packageSize: real("package_size"),
+  brand: text("brand"),
 });
 
 // ── Food preferences ─────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { useToast } from "@/components/toast";
 import { PRODUCT_CATEGORIES } from "@/lib/utils";
 import { CategoryIcon } from "@/components/category-icons";
@@ -26,8 +26,17 @@ type PantryItem = {
   expiry_date: string | null;
   opened_at: string | null;
   shelf_life_after_open_days: number | null;
+  package_size: number | null;
+  brand: string | null;
   icon: string | null;
   defaultUnit: string | null;
+  kcal_per_100: number | null;
+  protein_per_100: number | null;
+  carbs_per_100: number | null;
+  fat_per_100: number | null;
+  fiber_per_100: number | null;
+  default_package_size: number | null;
+  default_brand: string | null;
 };
 
 const UNITS = ["pcs", "g", "kg", "ml", "L", "cl", "lot", "bout.", "boîte"];
@@ -55,6 +64,16 @@ export default function InventairePage() {
   // Sort
   const [sortCol, setSortCol] = useState<"name" | "category" | "expiry">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Expansion des détails nutrition/grammage
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleExpanded = (id: number) =>
+    setExpanded((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   useEffect(() => {
     fetchPantry();
@@ -175,6 +194,62 @@ export default function InventairePage() {
   const markOpenedToday = (item: PantryItem) => {
     const today = new Date().toISOString().slice(0, 10);
     updateOpened(item.id, today);
+  };
+
+  const updatePackageSize = async (id: number, value: number | null) => {
+    await fetch("/api/pantry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, packageSize: value }),
+    });
+    fetchPantry();
+  };
+
+  const updateBrand = async (id: number, value: string | null) => {
+    await fetch("/api/pantry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, brand: value }),
+    });
+    fetchPantry();
+  };
+
+  const updateProductNutrition = async (
+    productId: number,
+    patch: Partial<{
+      kcalPer100: number | null;
+      proteinPer100: number | null;
+      carbsPer100: number | null;
+      fatPer100: number | null;
+      fiberPer100: number | null;
+      defaultPackageSize: number | null;
+      defaultBrand: string | null;
+    }>
+  ) => {
+    await fetch("/api/products", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: productId, ...patch }),
+    });
+    fetchPantry();
+  };
+
+  // Convertit quantité+unité en grammes/ml pour le calcul nutrition
+  const effectiveGrams = (item: PantryItem): number | null => {
+    const qty = item.quantity || 0;
+    const unit = (item.unit || "").toLowerCase();
+    const pkg = item.package_size ?? item.default_package_size ?? null;
+    if (unit === "g" || unit === "ml") return qty;
+    if (unit === "kg" || unit === "l") return qty * 1000;
+    if (unit === "cl") return qty * 10;
+    if (pkg != null) return qty * pkg;
+    return null;
+  };
+
+  const totalKcal = (item: PantryItem): number | null => {
+    const g = effectiveGrams(item);
+    if (g == null || item.kcal_per_100 == null) return null;
+    return Math.round((g * item.kcal_per_100) / 100);
   };
 
   const removeItem = async (id: number) => {
@@ -644,12 +719,35 @@ export default function InventairePage() {
                 {filteredItems.map((item) => {
                   const expiryInfo = getExpiryInfo(item);
                   const expValue = item.expiry_date || item.expires_at || "";
+                  const isExpanded = expanded.has(item.id);
+                  const kcal = totalKcal(item);
+                  const effG = effectiveGrams(item);
                   return (
-                    <tr key={item.id} className="hover:bg-card-hover group">
+                    <Fragment key={item.id}>
+                    <tr className="hover:bg-card-hover group">
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleExpanded(item.id)}
+                            className="text-muted hover:text-primary w-4 shrink-0"
+                            title="Détails (nutrition, grammage, marque)"
+                          >
+                            {isExpanded ? "▾" : "▸"}
+                          </button>
                           <span className="text-lg">{item.icon || "🛒"}</span>
-                          <span className="font-medium">{item.product_name}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-medium truncate">{item.product_name}</span>
+                            {(item.brand || item.default_brand) && (
+                              <span className="text-[10px] text-muted truncate">
+                                {item.brand || item.default_brand}
+                              </span>
+                            )}
+                          </div>
+                          {kcal != null && (
+                            <span className="text-[10px] text-muted bg-card-hover px-1.5 py-0.5 rounded whitespace-nowrap ml-auto">
+                              {kcal} kcal
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2.5 hidden sm:table-cell">
@@ -760,12 +858,217 @@ export default function InventairePage() {
                         </button>
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr className="bg-background/50">
+                        <td colSpan={6} className="px-4 py-3">
+                          <DetailsPanel
+                            item={item}
+                            effectiveGrams={effG}
+                            totalKcal={kcal}
+                            onPackageSize={(v) => updatePackageSize(item.id, v)}
+                            onBrand={(v) => updateBrand(item.id, v)}
+                            onProductUpdate={(patch) =>
+                              item.product_id && updateProductNutrition(item.product_id, patch)
+                            }
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Panneau détails : marque, grammage, nutrition ────────────────────
+type DetailsPanelProps = {
+  item: PantryItem;
+  effectiveGrams: number | null;
+  totalKcal: number | null;
+  onPackageSize: (v: number | null) => void;
+  onBrand: (v: string | null) => void;
+  onProductUpdate: (patch: {
+    kcalPer100?: number | null;
+    proteinPer100?: number | null;
+    carbsPer100?: number | null;
+    fatPer100?: number | null;
+    fiberPer100?: number | null;
+    defaultPackageSize?: number | null;
+    defaultBrand?: string | null;
+  }) => void;
+};
+
+function DetailsPanel({
+  item,
+  effectiveGrams,
+  totalKcal,
+  onPackageSize,
+  onBrand,
+  onProductUpdate,
+}: DetailsPanelProps) {
+  const pkgOverride = item.package_size;
+  const pkgDefault = item.default_package_size;
+  const brandOverride = item.brand;
+  const brandDefault = item.default_brand;
+
+  const num = (v: string): number | null => (v === "" ? null : Number(v));
+
+  const Field = ({
+    label,
+    value,
+    suffix,
+    onBlur,
+    placeholder,
+    step,
+  }: {
+    label: string;
+    value: number | string | null;
+    suffix?: string;
+    onBlur: (v: string) => void;
+    placeholder?: string;
+    step?: string;
+  }) => {
+    const [local, setLocal] = useState(value == null ? "" : String(value));
+    useEffect(() => {
+      setLocal(value == null ? "" : String(value));
+    }, [value]);
+    return (
+      <label className="flex flex-col gap-0.5 text-xs">
+        <span className="text-muted">{label}</span>
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            inputMode="decimal"
+            step={step || "0.1"}
+            value={local}
+            placeholder={placeholder}
+            onChange={(e) => setLocal(e.target.value)}
+            onBlur={() => {
+              if (local !== (value == null ? "" : String(value))) onBlur(local);
+            }}
+            className="w-full bg-card border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/30"
+          />
+          {suffix && <span className="text-[10px] text-muted">{suffix}</span>}
+        </div>
+      </label>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Spécifique à cet item */}
+      <div>
+        <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">
+          Cet item
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <label className="flex flex-col gap-0.5 text-xs">
+            <span className="text-muted">Marque</span>
+            <input
+              type="text"
+              defaultValue={brandOverride || ""}
+              placeholder={brandDefault || "—"}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v !== (brandOverride || "")) onBrand(v || null);
+              }}
+              className="w-full bg-card border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/30"
+            />
+          </label>
+          <Field
+            label="Grammage / format"
+            value={pkgOverride}
+            placeholder={pkgDefault != null ? String(pkgDefault) : "ex: 1000"}
+            suffix="g ou ml"
+            step="1"
+            onBlur={(v) => onPackageSize(num(v))}
+          />
+          <div className="flex flex-col gap-0.5 text-xs">
+            <span className="text-muted">Poids total estimé</span>
+            <div className="bg-card border border-border rounded px-2 py-1 text-xs text-muted">
+              {effectiveGrams != null ? `${Math.round(effectiveGrams)} g/ml` : "—"}
+            </div>
+          </div>
+          <div className="flex flex-col gap-0.5 text-xs">
+            <span className="text-muted">Calories totales</span>
+            <div className="bg-card border border-border rounded px-2 py-1 text-xs font-semibold">
+              {totalKcal != null ? `${totalKcal} kcal` : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Base commune au produit */}
+      {item.product_id ? (
+        <div>
+          <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">
+            Nutrition par 100 g/ml (partagée par tous les &quot;{item.product_name}&quot;)
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <Field
+              label="Calories"
+              value={item.kcal_per_100}
+              suffix="kcal"
+              onBlur={(v) => onProductUpdate({ kcalPer100: num(v) })}
+            />
+            <Field
+              label="Protéines"
+              value={item.protein_per_100}
+              suffix="g"
+              onBlur={(v) => onProductUpdate({ proteinPer100: num(v) })}
+            />
+            <Field
+              label="Glucides"
+              value={item.carbs_per_100}
+              suffix="g"
+              onBlur={(v) => onProductUpdate({ carbsPer100: num(v) })}
+            />
+            <Field
+              label="Lipides"
+              value={item.fat_per_100}
+              suffix="g"
+              onBlur={(v) => onProductUpdate({ fatPer100: num(v) })}
+            />
+            <Field
+              label="Fibres"
+              value={item.fiber_per_100}
+              suffix="g"
+              onBlur={(v) => onProductUpdate({ fiberPer100: num(v) })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <Field
+              label="Grammage typique"
+              value={item.default_package_size}
+              suffix="g ou ml"
+              step="1"
+              onBlur={(v) => onProductUpdate({ defaultPackageSize: num(v) })}
+            />
+            <label className="flex flex-col gap-0.5 text-xs">
+              <span className="text-muted">Marque par défaut</span>
+              <input
+                type="text"
+                defaultValue={item.default_brand || ""}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v !== (item.default_brand || ""))
+                    onProductUpdate({ defaultBrand: v || null });
+                }}
+                className="w-full bg-card border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/30"
+              />
+            </label>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted italic">
+          Produit personnalisé sans fiche catalogue — ajoute un produit depuis la liste pour mutualiser la nutrition.
+        </p>
       )}
     </div>
   );

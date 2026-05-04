@@ -25,6 +25,8 @@ type RecipePhotoProps = {
   showCredit?: boolean;
   /** persiste l'URL trouvée en DB via PATCH /api/recipes/:id (false par défaut) */
   persist?: boolean;
+  /** tone du placeholder rayé en fallback */
+  placeholderTone?: "terra" | "olive" | "mustard" | "neutral";
 };
 
 const SS_KEY = (name: string) => `mw_photo_${name.toLowerCase().slice(0, 60)}`;
@@ -34,6 +36,7 @@ export function RecipePhoto({
   className = "",
   showCredit = false,
   persist = false,
+  placeholderTone = "terra",
 }: RecipePhotoProps) {
   const [url, setUrl] = useState<string | null>(recipe.photo_url || null);
   const [credit, setCredit] = useState<string | null>(recipe.photo_credit || null);
@@ -85,11 +88,12 @@ export function RecipePhoto({
   }, [recipe.id, recipe.name, recipe.photo_url, persist]);
 
   if (!url) {
+    const toneClass =
+      placeholderTone === "neutral"
+        ? "placeholder-img"
+        : `placeholder-img placeholder-img-${placeholderTone}`;
     return (
-      <div
-        className={`placeholder-img placeholder-img-terra ${className}`}
-        style={{ minHeight: 120 }}
-      >
+      <div className={`${toneClass} ${className}`} style={{ minHeight: 120 }}>
         {loading ? "…" : recipe.name.slice(0, 24)}
       </div>
     );

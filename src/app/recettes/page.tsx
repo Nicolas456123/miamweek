@@ -304,23 +304,39 @@ export default function RecettesPage() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto pb-24 md:pb-8">
-      <PageHeader
-        eyebrow="carnet"
-        title={
-          <>
-            Recettes <span style={{ fontStyle: "italic", color: "var(--color-terracotta)" }}>du carnet</span>
-          </>
-        }
-        subtitle={`${filteredRecipes.length} recette${filteredRecipes.length !== 1 ? "s" : ""}`}
-        actions={
-          !showAdd && (
+    <div className="pb-24 md:pb-8">
+      {/* Hero — title is the eyebrow itself */}
+      <header
+        className="pb-8 mb-8 border-b flex items-end justify-between gap-6 flex-wrap"
+        style={{ borderColor: "var(--color-line)" }}
+      >
+        <h1
+          className="font-display tracking-tight"
+          style={{
+            color: "var(--color-ink)",
+            fontSize: "clamp(36px, 5vw, 72px)",
+            lineHeight: 1.0,
+            letterSpacing: "-0.02em",
+            maxWidth: "18ch",
+          }}
+        >
+          Toutes les recettes,{" "}
+          <span style={{ fontStyle: "italic", color: "var(--color-terracotta)" }}>
+            par catégorie ou par humeur.
+          </span>
+        </h1>
+        <div className="flex items-center gap-3">
+          <span className="eyebrow tnum" style={{ color: "var(--color-ink-mute)" }}>
+            {String(filteredRecipes.length).padStart(2, "0")} recette
+            {filteredRecipes.length !== 1 ? "s" : ""}
+          </span>
+          {!showAdd && (
             <Button variant="ink" size="md" onClick={() => setShowAdd(true)}>
               + Ajouter
             </Button>
-          )
-        }
-      />
+          )}
+        </div>
+      </header>
 
       {/* AI suggest */}
       <Card variant="soft" padding="md" className="mb-5">
@@ -620,8 +636,8 @@ export default function RecettesPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredRecipes.map((recipe) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px" style={{ background: "var(--color-line)" }}>
+          {filteredRecipes.map((recipe, idx) => {
             const isExpanded = expandedId === recipe.id;
             const utensils = parseJSON<string[]>(recipe.utensils, []);
             const steps = parseJSON<string[]>(recipe.steps, []);
@@ -629,13 +645,19 @@ export default function RecettesPage() {
             const diffTone = recipe.difficulty
               ? DIFFICULTY_TONE[recipe.difficulty] || "neutral"
               : "neutral";
+            const tones: ("neutral" | "terra" | "olive" | "mustard")[] = [
+              "neutral",
+              "terra",
+              "olive",
+              "mustard",
+            ];
+            const tone = tones[idx % tones.length];
 
             return (
-              <Card
+              <div
                 key={recipe.id}
-                variant="default"
-                padding="none"
-                className="overflow-hidden flex flex-col"
+                className="flex flex-col"
+                style={{ background: "var(--color-cream-pale)" }}
               >
                 <button
                   onClick={() => setExpandedId(isExpanded ? null : recipe.id)}
@@ -644,7 +666,8 @@ export default function RecettesPage() {
                   <RecipePhoto
                     recipe={recipe}
                     persist
-                    className="aspect-[4/3] w-full"
+                    placeholderTone={tone}
+                    className="aspect-square w-full"
                   />
                 </button>
 
@@ -822,7 +845,7 @@ export default function RecettesPage() {
                     )}
                   </div>
                 )}
-              </Card>
+              </div>
             );
           })}
         </div>

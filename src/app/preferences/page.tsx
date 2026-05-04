@@ -47,6 +47,13 @@ export default function PreferencesPage() {
   const [customNote, setCustomNote] = useState("");
   const [filterStatus, setFilterStatus] = useState<StatusKey | "">("");
 
+  const fetchPreferences = () => {
+    fetch("/api/preferences")
+      .then((r) => r.json())
+      .then((data) => setPreferences(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  };
+
   useEffect(() => {
     fetchPreferences();
     fetch("/api/products")
@@ -54,13 +61,6 @@ export default function PreferencesPage() {
       .then((data) => setProducts(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
-
-  const fetchPreferences = () => {
-    fetch("/api/preferences")
-      .then((r) => r.json())
-      .then((data) => setPreferences(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  };
 
   const addPreference = async (product: Product, status: string) => {
     await fetch("/api/preferences", {

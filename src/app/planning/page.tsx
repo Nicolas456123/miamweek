@@ -1,9 +1,25 @@
 "use client";
 
+/**
+ * Planning — refonte éditoriale complète.
+ *
+ * Garde TOUTE la logique métier de la version précédente :
+ * - même contrats API (/api/meal-plan, /api/recipes, /api/list, /api/ai/suggest)
+ * - même persistance localStorage des mealConfigs
+ * - même flow auto-fill / addWeekToList / view today vs all
+ *
+ * Refondu côté visuel :
+ * - Hero éditorial avec date du jour en grand
+ * - Lignes de jours plates (pas de cards aux bords arrondis)
+ * - Slots midi/soir en colonnes typographiques
+ * - Toolbar d'actions éditoriale (boutons pill terre cuite)
+ */
+
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getMonday, DAYS, MEAL_TYPES, MEAL_SLOTS } from "@/lib/utils";
 import { useToast } from "@/components/toast";
+import { Button, Chip, PageHeader, EmptyState } from "@/components/ui-kit";
 
 type Recipe = {
   id: number;
@@ -25,25 +41,18 @@ type MealEntry = {
   recipeCategory?: string;
 };
 
-type MealConfig = {
-  mode: "cook" | "skip";
-  persons: number;
-};
+type MealConfig = { mode: "cook" | "skip"; persons: number };
 
 const DEFAULT_LUNCH: MealConfig = { mode: "skip", persons: 1 };
 const DEFAULT_DINNER: MealConfig = { mode: "cook", persons: 2 };
 
 export default function PlanningPage() {
+  const { toast } = useToast();
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const { toast } = useToast();
   const [viewAll, setViewAll] = useState(false);
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [addingSlot, setAddingSlot] = useState<{
-    day: number;
-    type: string;
-    weekStart: string;
-  } | null>(null);
+  const [weekOffset] = useState(0);
+  const [addingSlot, setAddingSlot] = useState<{ day: number; type: string; weekStart: string } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [customName, setCustomName] = useState("");
   const [mealConfigs, setMealConfigs] = useState<Record<string, MealConfig>>(() => {
@@ -59,29 +68,19 @@ export default function PlanningPage() {
   const todayRef = useRef<HTMLDivElement>(null);
   const scrollBoxRef = useRef<HTMLDivElement>(null);
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
-
-  // Persist meal configs to localStorage
-  useEffect(() => {
-    if (Object.keys(mealConfigs).length > 0) {
-      localStorage.setItem("miamweek_meal_configs", JSON.stringify(mealConfigs));
-    }
-  }, [mealConfigs]);
-
-  const todayDayOfWeek = useMemo(() => {
-    const day = today.getDay();
-    return day === 0 ? 6 : day - 1;
-  }, [today]);
-
+  const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
+  const todayDayOfWeek = useMemo(() => { const d = today.getDay(); return d === 0 ? 6 : d - 1; }, [today]);
   const currentMonday = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + weekOffset * 7);
     return getMonday(d);
   }, [weekOffset]);
+
+  useEffect(() => {
+    if (Object.keys(mealConfigs).length > 0) {
+      localStorage.setItem("miamweek_meal_configs", JSON.stringify(mealConfigs));
+    }
+  }, [mealConfigs]);
 
   const getMealConfig = (day: number, meal: "lunch" | "dinner"): MealConfig =>
     mealConfigs[`${day}_${meal}`] || (meal === "lunch" ? DEFAULT_LUNCH : DEFAULT_DINNER);
@@ -89,40 +88,26 @@ export default function PlanningPage() {
   const toggleMealMode = (day: number, meal: "lunch" | "dinner") => {
     const key = `${day}_${meal}`;
     const current = getMealConfig(day, meal);
-    setMealConfigs((prev) => ({
-      ...prev,
-      [key]: { ...current, mode: current.mode === "cook" ? "skip" : "cook" },
-    }));
+    setMealConfigs((p) => ({ ...p, [key]: { ...current, mode: current.mode === "cook" ? "skip" : "cook" } }));
   };
 
   const setMealPersons = (day: number, meal: "lunch" | "dinner", persons: number) => {
     const key = `${day}_${meal}`;
-    setMealConfigs((prev) => ({
-      ...prev,
-      [key]: { ...getMealConfig(day, meal), persons: Math.max(1, persons) },
-    }));
+    setMealConfigs((p) => ({ ...p, [key]: { ...getMealConfig(day, meal), persons: Math.max(1, persons) } }));
   };
 
   const fetchMeals = useCallback(() => {
     if (viewAll) {
-      // Fetch current + next week
       const thisMonday = getMonday(new Date());
       const nextMondayDate = new Date(thisMonday);
       nextMondayDate.setDate(nextMondayDate.getDate() + 7);
       const nextMonday = nextMondayDate.toISOString().split("T")[0];
-
       Promise.all([
         fetch(`/api/meal-plan?weekStart=${thisMonday}`).then((r) => r.json()),
         fetch(`/api/meal-plan?weekStart=${nextMonday}`).then((r) => r.json()),
-      ])
-        .then(([w1, w2]) => {
-          const all = [
-            ...(Array.isArray(w1) ? w1 : []),
-            ...(Array.isArray(w2) ? w2 : []),
-          ];
-          setMeals(all);
-        })
-        .catch(console.error);
+      ]).then(([w1, w2]) => {
+        setMeals([...(Array.isArray(w1) ? w1 : []), ...(Array.isArray(w2) ? w2 : [])]);
+      }).catch(console.error);
     } else {
       fetch(`/api/meal-plan?weekStart=${currentMonday}`)
         .then((r) => r.json())
@@ -131,45 +116,26 @@ export default function PlanningPage() {
     }
   }, [currentMonday, viewAll]);
 
+  useEffect(() => { fetchMeals(); }, [fetchMeals]);
   useEffect(() => {
-    fetchMeals();
-  }, [fetchMeals]);
-
-  useEffect(() => {
-    fetch("/api/recipes")
-      .then((r) => r.json())
-      .then((data) => setRecipes(Array.isArray(data) ? data : []))
-      .catch(console.error);
+    fetch("/api/recipes").then((r) => r.json()).then((d) => setRecipes(Array.isArray(d) ? d : [])).catch(console.error);
   }, []);
 
-  // Auto-scroll to today when viewing all days
   useEffect(() => {
     if (viewAll && todayRef.current && scrollBoxRef.current) {
       setTimeout(() => {
-        const container = scrollBoxRef.current!;
+        const c = scrollBoxRef.current!;
         const card = todayRef.current!;
-        container.scrollTop = card.offsetTop - container.offsetTop;
+        c.scrollTop = card.offsetTop - c.offsetTop;
       }, 100);
     }
   }, [viewAll]);
 
-  const addMeal = async (
-    dayOfWeek: number,
-    mealType: string,
-    weekStart: string,
-    recipeId?: number,
-    name?: string
-  ) => {
+  const addMeal = async (dayOfWeek: number, mealType: string, weekStart: string, recipeId?: number, name?: string) => {
     await fetch("/api/meal-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        weekStart,
-        dayOfWeek,
-        mealType,
-        recipeId: recipeId || null,
-        customName: name || null,
-      }),
+      body: JSON.stringify({ weekStart, dayOfWeek, mealType, recipeId: recipeId || null, customName: name || null }),
     });
     setAddingSlot(null);
     setRecipeSearch("");
@@ -183,22 +149,16 @@ export default function PlanningPage() {
   };
 
   const removeMenuGroup = async (mealIds: number[]) => {
-    for (const id of mealIds) {
-      await fetch(`/api/meal-plan?id=${id}`, { method: "DELETE" });
-    }
+    for (const id of mealIds) await fetch(`/api/meal-plan?id=${id}`, { method: "DELETE" });
     fetchMeals();
   };
 
   const addWeekToList = async () => {
     const recipeMeals = meals.filter((m) => m.recipe_id);
     if (recipeMeals.length === 0) return;
-
-    // Fetch all recipes in parallel
     const recipeResponses = await Promise.all(
       recipeMeals.map((m) => fetch(`/api/recipes/${m.recipe_id}`).then((r) => r.json()))
     );
-
-    // Collect all ingredients to add
     const toAdd: { productName: string; quantity: number; unit: string; category: string; sourceRecipe: string }[] = [];
     for (const recipe of recipeResponses) {
       if (!recipe.ingredients) continue;
@@ -212,19 +172,15 @@ export default function PlanningPage() {
         });
       }
     }
-
-    // Add all ingredients in parallel (batches of 5)
     for (let i = 0; i < toAdd.length; i += 5) {
       const batch = toAdd.slice(i, i + 5);
-      await Promise.all(
-        batch.map((ing) =>
-          fetch("/api/list", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...ing, source: "recipe", listStatus: "prep" }),
-          })
-        )
-      );
+      await Promise.all(batch.map((ing) =>
+        fetch("/api/list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...ing, source: "recipe", listStatus: "prep" }),
+        })
+      ));
     }
     toast(`${recipeMeals.length} recette(s) ajoutées à la liste`);
   };
@@ -233,22 +189,15 @@ export default function PlanningPage() {
     setAutoFilling(true);
     try {
       const dayDescriptions = DAYS.map((name, i) => {
-        const lunchConfig = getMealConfig(i, "lunch");
-        const dinnerConfig = getMealConfig(i, "dinner");
-        const lunchExisting = getMealsForPeriod(i, currentMonday, "lunch").length;
-        const dinnerExisting = getMealsForPeriod(i, currentMonday, "dinner").length;
-
-        const lunchDesc = lunchConfig.mode === "skip" ? "pas de repas"
-          : `cuisine pour ${lunchConfig.persons} personne(s)${lunchExisting > 0 ? ` (${lunchExisting} repas déjà)` : ""}`;
-
-        const dinnerDesc = dinnerConfig.mode === "skip" ? "pas de repas"
-          : `cuisine pour ${dinnerConfig.persons} personne(s)${dinnerExisting > 0 ? ` (${dinnerExisting} repas déjà)` : ""}`;
-
-        return `${name}: Midi=${lunchDesc}, Soir=${dinnerDesc}`;
+        const lc = getMealConfig(i, "lunch");
+        const dc = getMealConfig(i, "dinner");
+        const le = getMealsForPeriod(i, currentMonday, "lunch").length;
+        const de = getMealsForPeriod(i, currentMonday, "dinner").length;
+        const ld = lc.mode === "skip" ? "pas de repas" : `cuisine pour ${lc.persons} personne(s)${le > 0 ? ` (${le} repas déjà)` : ""}`;
+        const dd = dc.mode === "skip" ? "pas de repas" : `cuisine pour ${dc.persons} personne(s)${de > 0 ? ` (${de} repas déjà)` : ""}`;
+        return `${name}: Midi=${ld}, Soir=${dd}`;
       }).join("\n");
-
       const recipeNames = recipes.map((r) => `${r.name} (${r.category || "?"}, ${r.servings} pers.)`).join(", ");
-
       const res = await fetch("/api/ai/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -258,7 +207,6 @@ export default function PlanningPage() {
       });
       const data = await res.json();
       const suggestions = data.meals || data.recipes || data.suggestions;
-
       if (Array.isArray(suggestions)) {
         for (const meal of suggestions) {
           const period = meal.mealType?.startsWith("lunch") ? "lunch" : "dinner";
@@ -268,11 +216,7 @@ export default function PlanningPage() {
             (m) => m.day_of_week === meal.dayOfWeek && m.meal_type === meal.mealType && m.week_start === currentMonday
           );
           if (existing.length > 0) continue;
-
-          const matchedRecipe = recipes.find(
-            (r) => r.name.toLowerCase() === (meal.name || "").toLowerCase()
-          );
-
+          const matchedRecipe = recipes.find((r) => r.name.toLowerCase() === (meal.name || "").toLowerCase());
           await fetch("/api/meal-plan", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -287,9 +231,7 @@ export default function PlanningPage() {
         }
         fetchMeals();
       }
-    } catch (err) {
-      console.error("Auto-fill error:", err);
-    }
+    } catch (e) { console.error("Auto-fill error:", e); }
     setAutoFilling(false);
   };
 
@@ -300,7 +242,7 @@ export default function PlanningPage() {
 
   const getSlotLabel = (mealType: string) => {
     const slot = MEAL_SLOTS[mealType as keyof typeof MEAL_SLOTS];
-    return slot || { label: mealType, icon: "🍽️", color: "text-muted" };
+    return slot || { label: mealType, icon: "·", color: "text-muted" };
   };
 
   const getRecipeName = (meal: MealEntry) => {
@@ -320,31 +262,19 @@ export default function PlanningPage() {
 
   const groupMealsForPeriod = (day: number, weekStart: string, period: "lunch" | "dinner") => {
     const periodMeals = getMealsForPeriod(day, weekStart, period);
-    const subSlotMeals = periodMeals.filter((m) => m.meal_type.includes("_"));
-    const standaloneMeals = periodMeals.filter((m) => !m.meal_type.includes("_"));
-    const menuGroup = subSlotMeals.length > 0 ? subSlotMeals : null;
-    return { menuGroup, standaloneMeals };
+    return {
+      menuGroup: periodMeals.filter((m) => m.meal_type.includes("_")),
+      standaloneMeals: periodMeals.filter((m) => !m.meal_type.includes("_")),
+    };
   };
 
-  // Build list of days to display
   const displayDays = useMemo(() => {
     if (!viewAll) {
-      // Just today
-      return [{
-        date: today,
-        dayOfWeek: todayDayOfWeek,
-        weekStart: currentMonday,
-        isToday: true,
-        isPast: false,
-      }];
+      return [{ date: today, dayOfWeek: todayDayOfWeek, weekStart: currentMonday, isToday: true, isPast: false }];
     }
-
-    // All days: from today to 13 days ahead (2 weeks)
     const days: { date: Date; dayOfWeek: number; weekStart: string; isToday: boolean; isPast: boolean }[] = [];
-    // Include a few past days for context (from Monday of current week)
     const mondayDate = new Date(currentMonday);
     const startDate = mondayDate < today ? mondayDate : today;
-
     for (let i = 0; i < 21; i++) {
       const d = new Date(startDate);
       d.setDate(startDate.getDate() + i);
@@ -353,7 +283,6 @@ export default function PlanningPage() {
       const ws = getMonday(d);
       const isToday = d.toDateString() === today.toDateString();
       const isPast = d < today && !isToday;
-
       days.push({ date: d, dayOfWeek, weekStart: ws, isToday, isPast });
     }
     return days;
@@ -361,44 +290,47 @@ export default function PlanningPage() {
 
   const filledSlots = meals.length;
 
-  // Render a single day card
-  const renderDayCard = (day: typeof displayDays[0]) => {
-    const dayLabel = day.date.toLocaleDateString("fr-FR", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    });
+  const renderDayRow = (day: typeof displayDays[0]) => {
+    const dayName = day.date.toLocaleDateString("fr-FR", { weekday: "long" });
+    const dayDate = day.date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
 
     return (
       <div
         key={`${day.weekStart}-${day.dayOfWeek}`}
         ref={day.isToday ? todayRef : undefined}
-        className={`bg-card border rounded-xl overflow-hidden transition-opacity ${
-          day.isToday
-            ? "border-primary border-2 shadow-sm"
-            : day.isPast
-              ? "border-border opacity-60"
-              : "border-border"
-        }`}
+        className="py-6 border-t"
+        style={{
+          borderColor: "var(--color-line)",
+          opacity: day.isPast ? 0.45 : 1,
+        }}
       >
         {/* Day header */}
-        <div
-          className={`px-4 py-2.5 flex items-center gap-2 ${
-            day.isToday ? "bg-primary-light" : "bg-card-hover"
-          }`}
-        >
-          <span className={`text-sm font-bold capitalize ${day.isToday ? "text-primary" : "text-foreground"}`}>
-            {dayLabel}
+        <div className="flex items-baseline gap-4 mb-4">
+          <span
+            className="font-mono text-xs tnum"
+            style={{ color: "var(--color-ink-faint)", letterSpacing: "0.08em", textTransform: "uppercase", minWidth: 28 }}
+          >
+            {String(day.dayOfWeek + 1).padStart(2, "0")}
           </span>
-          {day.isToday && (
-            <span className="text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">
-              Aujourd&apos;hui
-            </span>
-          )}
+          <h3
+            className="font-display capitalize"
+            style={{
+              fontSize: day.isToday ? 36 : 24,
+              lineHeight: 1.05,
+              color: day.isToday ? "var(--color-terracotta)" : "var(--color-ink)",
+              fontStyle: day.isToday ? "italic" : "normal",
+            }}
+          >
+            {dayName}
+          </h3>
+          <span className="eyebrow" style={{ color: "var(--color-ink-mute)" }}>
+            {dayDate}
+          </span>
+          {day.isToday && <Chip tone="terra">aujourd&apos;hui</Chip>}
         </div>
 
-        {/* Meal slots */}
-        <div className="grid grid-cols-2 divide-x divide-border">
+        {/* Two columns midi / soir */}
+        <div className="grid grid-cols-2 gap-px" style={{ background: "var(--color-line)" }}>
           {(["lunch", "dinner"] as const).map((mealType) => {
             const config = getMealConfig(day.dayOfWeek, mealType);
             const { menuGroup, standaloneMeals } = groupMealsForPeriod(day.dayOfWeek, day.weekStart, mealType);
@@ -408,137 +340,119 @@ export default function PlanningPage() {
               addingSlot?.weekStart === day.weekStart;
 
             return (
-              <div key={mealType} className="min-h-[80px]">
-                {/* Meal header */}
-                <div className="px-3 pt-2 pb-1 flex items-center justify-between">
-                  <p className="text-xs text-muted font-medium">
-                    {MEAL_TYPES[mealType]}
-                  </p>
+              <div key={mealType} className="p-4" style={{ background: "var(--color-cream-pale)", minHeight: 120 }}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="eyebrow">{MEAL_TYPES[mealType]}</span>
                   <div className="flex items-center gap-1">
                     <button
-                      title={config.mode === "cook" ? "Désactiver ce repas" : "Activer ce repas"}
+                      title={config.mode === "cook" ? "Désactiver" : "Activer"}
                       onClick={() => toggleMealMode(day.dayOfWeek, mealType)}
-                      className={`w-6 h-6 rounded-md text-xs flex items-center justify-center transition-colors ${
-                        config.mode === "cook"
-                          ? "bg-primary text-white"
-                          : "bg-background border border-border text-muted hover:text-foreground"
-                      }`}
+                      className="font-mono text-[10px] px-2 py-1 rounded transition-colors"
+                      style={{
+                        background: config.mode === "cook" ? "var(--color-ink)" : "transparent",
+                        color: config.mode === "cook" ? "var(--color-cream-pale)" : "var(--color-ink-mute)",
+                        border: "1px solid",
+                        borderColor: config.mode === "cook" ? "var(--color-ink)" : "var(--color-line)",
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                      }}
                     >
-                      {config.mode === "cook" ? "👨‍🍳" : "—"}
+                      {config.mode === "cook" ? "ON" : "OFF"}
                     </button>
                     {config.mode === "cook" && (
-                      <div className="flex items-center gap-0.5 ml-1 bg-background border border-border rounded-md px-0.5">
+                      <div
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded"
+                        style={{ background: "var(--color-cream)", border: "1px solid var(--color-line)" }}
+                      >
                         <button
                           onClick={() => setMealPersons(day.dayOfWeek, mealType, config.persons - 1)}
-                          className="w-4 h-4 text-[10px] font-bold text-muted hover:text-foreground"
-                        >
-                          -
-                        </button>
-                        <span className="text-[10px] font-semibold w-3 text-center">{config.persons}</span>
+                          className="text-[11px]"
+                          style={{ color: "var(--color-ink-mute)", width: 12 }}
+                        >−</button>
+                        <span className="text-[11px] font-mono tnum" style={{ minWidth: 8, textAlign: "center" }}>
+                          {config.persons}
+                        </span>
                         <button
                           onClick={() => setMealPersons(day.dayOfWeek, mealType, config.persons + 1)}
-                          className="w-4 h-4 text-[10px] font-bold text-muted hover:text-foreground"
-                        >
-                          +
-                        </button>
-                        <span className="text-[8px] text-muted">p.</span>
+                          className="text-[11px]"
+                          style={{ color: "var(--color-ink-mute)", width: 12 }}
+                        >+</button>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Meal content */}
                 {config.mode === "skip" ? (
-                  <div className="px-3 py-3 text-center text-xs text-muted italic bg-gray-50">
-                    —
-                  </div>
+                  <p className="font-display italic text-lg" style={{ color: "var(--color-ink-faint)" }}>
+                    rien.
+                  </p>
                 ) : (
-                  <div className="px-3 pb-3">
-                    {/* Composed menu group */}
-                    {menuGroup && menuGroup.length > 0 && (
-                      <div className="group mb-1.5 bg-background border border-border rounded-lg overflow-hidden">
-                        <div className="divide-y divide-border/50">
+                  <div>
+                    {menuGroup.length > 0 && (
+                      <div className="group mb-2">
+                        <div className="space-y-1">
                           {menuGroup
                             .sort((a, b) => {
                               const order = ["entree", "plat", "dessert", "boisson"];
-                              const aIdx = order.findIndex((o) => a.meal_type.endsWith(o));
-                              const bIdx = order.findIndex((o) => b.meal_type.endsWith(o));
-                              return aIdx - bIdx;
+                              return order.findIndex((o) => a.meal_type.endsWith(o)) - order.findIndex((o) => b.meal_type.endsWith(o));
                             })
                             .map((meal) => {
                               const slotInfo = getSlotLabel(meal.meal_type);
                               return (
-                                <div
-                                  key={meal.id}
-                                  className="flex items-center gap-2 px-2.5 py-1.5 text-sm"
-                                >
-                                  <span className={`text-xs ${slotInfo.color}`}>
-                                    {slotInfo.icon}
+                                <div key={meal.id} className="flex items-baseline gap-2">
+                                  <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--color-ink-faint)", minWidth: 50 }}>
+                                    {slotInfo.label}
                                   </span>
-                                  <span className="font-medium flex-1">
+                                  <span className="font-display text-lg leading-tight" style={{ color: "var(--color-ink)" }}>
                                     {getRecipeName(meal)}
                                   </span>
                                 </div>
                               );
                             })}
                         </div>
-                        <div className="flex justify-end px-2 py-1 bg-gray-50/50">
-                          <button
-                            onClick={() => removeMenuGroup(menuGroup.map((m) => m.id))}
-                            className="text-muted hover:text-danger text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            Supprimer le menu
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => removeMenuGroup(menuGroup.map((m) => m.id))}
+                          className="mt-2 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ color: "var(--color-terracotta)" }}
+                        >
+                          ✕ supprimer le menu
+                        </button>
                       </div>
                     )}
 
-                    {/* Standalone meals */}
                     {standaloneMeals.map((meal) => (
-                      <div
-                        key={meal.id}
-                        className="group flex items-center gap-2 mb-1.5"
-                      >
-                        <div className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-sm">
-                          <span className="font-medium">
-                            {getRecipeName(meal)}
-                          </span>
-                        </div>
+                      <div key={meal.id} className="group flex items-baseline gap-2 mb-1">
+                        <span className="font-display text-xl leading-tight flex-1" style={{ color: "var(--color-ink)" }}>
+                          {getRecipeName(meal)}
+                        </span>
                         <button
                           onClick={() => removeMeal(meal.id)}
-                          className="text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
+                          className="text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ color: "var(--color-terracotta)" }}
+                        >✕</button>
                       </div>
                     ))}
 
-                    {/* Add meal */}
                     {isAdding ? (
-                      <div className="mt-1 space-y-2">
+                      <div className="mt-2 space-y-2">
                         <input
                           type="text"
                           value={recipeSearch}
                           onChange={(e) => setRecipeSearch(e.target.value)}
-                          placeholder="Chercher une recette..."
-                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          placeholder="Chercher une recette…"
+                          className="w-full bg-[var(--color-cream)] border border-[var(--color-line)] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-[var(--color-terracotta)]"
                           autoFocus
                         />
                         {recipeSearch && (
-                          <div className="max-h-40 overflow-y-auto space-y-0.5">
+                          <div className="max-h-40 overflow-y-auto space-y-px">
                             {filteredRecipes.slice(0, 8).map((r) => (
                               <button
                                 key={r.id}
                                 onClick={() => addMeal(day.dayOfWeek, mealType, day.weekStart, r.id)}
-                                className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-primary-light hover:text-primary transition-colors"
+                                className="w-full text-left px-2 py-1.5 text-xs hover:bg-[var(--color-cream-deep)] transition-colors"
                               >
                                 <span className="font-medium">{r.name}</span>
-                                {r.category && (
-                                  <span className="ml-1 text-muted">— {r.category}</span>
-                                )}
+                                {r.category && <span className="ml-1" style={{ color: "var(--color-ink-faint)" }}>— {r.category}</span>}
                               </button>
                             ))}
                           </div>
@@ -549,30 +463,29 @@ export default function PlanningPage() {
                             value={customName}
                             onChange={(e) => setCustomName(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter" && customName.trim())
-                                addMeal(day.dayOfWeek, mealType, day.weekStart, undefined, customName);
+                              if (e.key === "Enter" && customName.trim()) addMeal(day.dayOfWeek, mealType, day.weekStart, undefined, customName);
                             }}
-                            placeholder="Ou tape un nom libre..."
-                            className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-xs"
+                            placeholder="Ou un nom libre…"
+                            className="flex-1 bg-[var(--color-cream)] border border-[var(--color-line)] rounded px-2 py-1.5 text-xs"
                           />
                           <button
-                            onClick={() => {
-                              setAddingSlot(null);
-                              setRecipeSearch("");
-                              setCustomName("");
-                            }}
-                            className="text-xs text-muted px-2"
-                          >
-                            ✕
-                          </button>
+                            onClick={() => { setAddingSlot(null); setRecipeSearch(""); setCustomName(""); }}
+                            className="text-xs px-2"
+                            style={{ color: "var(--color-ink-mute)" }}
+                          >✕</button>
                         </div>
                       </div>
                     ) : (
                       <button
                         onClick={() => setAddingSlot({ day: day.dayOfWeek, type: mealType, weekStart: day.weekStart })}
-                        className="w-full mt-1 py-1.5 border border-dashed border-border rounded-lg text-xs text-muted hover:border-primary hover:text-primary transition-colors"
+                        className="w-full mt-2 py-1.5 text-xs transition-colors"
+                        style={{
+                          color: "var(--color-ink-mute)",
+                          border: "1px dashed var(--color-line)",
+                          borderRadius: 4,
+                        }}
                       >
-                        + Ajouter
+                        + ajouter
                       </button>
                     )}
                   </div>
@@ -586,60 +499,66 @@ export default function PlanningPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto flex flex-col h-[calc(100vh-160px)] md:h-[calc(100vh-120px)]">
-      {/* Header */}
-      <div className="mb-3 shrink-0">
-        <h1 className="text-xl font-bold mb-2">Planning repas</h1>
-        <div className="flex gap-2 flex-wrap">
-          <Link
-            href="/menu"
-            className="px-3 py-2 bg-card border border-border rounded-xl text-sm font-medium hover:shadow-sm transition-shadow"
-          >
-            🍽️ Composer un menu
-          </Link>
-          <button
-            onClick={autoFillWeek}
-            disabled={autoFilling}
-            className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors"
-          >
-            {autoFilling ? "Génération..." : "✨ Auto-remplir"}
-          </button>
-          {filledSlots > 0 && (
-            <button
-              onClick={addWeekToList}
-              className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors"
-            >
-              📝 Ajouter à ma liste
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="max-w-5xl mx-auto pb-24 md:pb-8">
+      <PageHeader
+        eyebrow="Planning"
+        title={<>La semaine <em style={{ color: "var(--color-terracotta)", fontStyle: "italic" }}>au menu</em></>}
+        subtitle="Glissez vos recettes, l'IA complète ce qui manque, la liste de courses se génère toute seule."
+        actions={
+          <>
+            <Link href="/menu">
+              <Button variant="secondary" size="sm">Composer un menu</Button>
+            </Link>
+            <Button variant="ink" size="sm" onClick={autoFillWeek} disabled={autoFilling}>
+              {autoFilling ? "Génération…" : "✦ Auto-remplir"}
+            </Button>
+            {filledSlots > 0 && (
+              <Button variant="primary" size="sm" onClick={addWeekToList}>
+                Vers la liste
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* View toggle */}
-      <div className="flex gap-2 mb-3 shrink-0">
-        <div className="flex bg-card border border-border rounded-xl overflow-hidden">
-          <button
-            onClick={() => setViewAll(false)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              !viewAll ? "bg-primary text-white" : "text-muted hover:text-foreground"
-            }`}
-          >
-            Aujourd&apos;hui
-          </button>
-          <button
-            onClick={() => setViewAll(true)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              viewAll ? "bg-primary text-white" : "text-muted hover:text-foreground"
-            }`}
-          >
-            Tous les jours
-          </button>
-        </div>
+      <div className="mb-2 flex gap-1 items-center">
+        <span className="eyebrow mr-3">vue</span>
+        <button
+          onClick={() => setViewAll(false)}
+          className="text-sm py-1 px-3 rounded-full transition-colors"
+          style={{
+            background: !viewAll ? "var(--color-ink)" : "transparent",
+            color: !viewAll ? "var(--color-cream-pale)" : "var(--color-ink-mute)",
+            border: "1px solid",
+            borderColor: !viewAll ? "var(--color-ink)" : "var(--color-line)",
+          }}
+        >
+          aujourd&apos;hui
+        </button>
+        <button
+          onClick={() => setViewAll(true)}
+          className="text-sm py-1 px-3 rounded-full transition-colors"
+          style={{
+            background: viewAll ? "var(--color-ink)" : "transparent",
+            color: viewAll ? "var(--color-cream-pale)" : "var(--color-ink-mute)",
+            border: "1px solid",
+            borderColor: viewAll ? "var(--color-ink)" : "var(--color-line)",
+          }}
+        >
+          21 jours
+        </button>
       </div>
 
-      {/* Days */}
-      <div ref={scrollBoxRef} className="space-y-2 overflow-y-auto flex-1 min-h-0 pb-4">
-        {displayDays.map((day) => renderDayCard(day))}
+      <div ref={scrollBoxRef} className="mt-2">
+        {displayDays.length === 0 ? (
+          <EmptyState
+            title="Rien à planifier"
+            description="Ajoutez votre première recette pour commencer la semaine."
+          />
+        ) : (
+          displayDays.map((day) => renderDayRow(day))
+        )}
       </div>
     </div>
   );

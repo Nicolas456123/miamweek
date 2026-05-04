@@ -13,6 +13,8 @@ export const recipes = sqliteTable("recipes", {
   difficulty: text("difficulty"), // "facile" | "moyen" | "difficile"
   utensils: text("utensils"), // JSON array: ["poêle", "casserole"]
   steps: text("steps"), // JSON array: ["Étape 1...", "Étape 2..."]
+  photoUrl: text("photo_url"),
+  photoCredit: text("photo_credit"),
   createdAt: text("created_at").default("CURRENT_TIMESTAMP"),
 });
 

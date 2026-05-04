@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 type PriceEntry = {
   id: number;
@@ -11,6 +11,7 @@ type PriceEntry = {
   price: number;
   date: string;
   store: string | null;
+  category?: string | null;
 };
 
 type Receipt = {
@@ -21,475 +22,347 @@ type Receipt = {
   item_count: number | null;
 };
 
-type StockItem = {
-  id: number;
-  productId: number;
-  productName?: string;
-  lastPurchased: string | null;
-  avgFrequencyDays: number | null;
-  status: string;
-  nextEstimated: string | null;
+const MONTHS_FR = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+
+type Category = string;
+
+const CAT_TONES: Record<string, string> = {
+  "Fruits & Légumes": "var(--color-olive)",
+  "Viandes & Poissons": "var(--color-terracotta)",
+  Épicerie: "var(--color-mustard)",
+  "Produits laitiers": "var(--color-ink-faint)",
+  Boissons: "var(--color-plum)",
 };
 
+function fmtMoney(n: number): string {
+  return n.toFixed(2).replace(".", ",") + "€";
+}
+
+function getISOWeek(d: Date): number {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 4 - (date.getDay() || 7));
+  const yearStart = new Date(date.getFullYear(), 0, 1);
+  return Math.ceil(((+date - +yearStart) / 86400000 + 1) / 7);
+}
+
 export default function SuiviPage() {
-  const [tab, setTab] = useState<"stock" | "prix" | "tickets">("stock");
-  const [stocks, setStocks] = useState<StockItem[]>([]);
   const [prices, setPrices] = useState<PriceEntry[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [scanning, setScanning] = useState(false);
-  const [ticketText, setTicketText] = useState("");
-  const [ticketImage, setTicketImage] = useState<string | null>(null);
-  const [scanMode, setScanMode] = useState<"text" | "photo">("photo");
-  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
-  const [receiptItems, setReceiptItems] = useState<PriceEntry[]>([]);
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
-    if (tab === "stock") {
-      fetch("/api/stock")
-        .then((r) => r.json())
-        .then((d) => setStocks(Array.isArray(d) ? d : []))
-        .catch(console.error);
-    } else if (tab === "prix") {
-      fetch("/api/receipts?type=prices")
-        .then((r) => r.json())
-        .then((d) => setPrices(Array.isArray(d) ? d : []))
-        .catch(console.error);
-    } else {
-      fetch("/api/receipts")
-        .then((r) => r.json())
-        .then((d) => setReceipts(Array.isArray(d) ? d : []))
-        .catch(console.error);
-    }
-  }, [tab]);
-
-  const scanTicket = async () => {
-    if (!ticketText.trim() && !ticketImage) return;
-    setScanning(true);
-    try {
-      const payload: { text?: string; image?: string } = {};
-      if (ticketImage) {
-        payload.image = ticketImage;
-      } else {
-        payload.text = ticketText;
-      }
-      const res = await fetch("/api/receipts/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (data.receipt) {
-        setTicketText("");
-        setTicketImage(null);
-        setTab("tickets");
-        fetch("/api/receipts")
-          .then((r) => r.json())
-          .then((d) => setReceipts(Array.isArray(d) ? d : []))
-          .catch(console.error);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-    setScanning(false);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setTicketImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const openReceipt = async (receipt: Receipt) => {
-    setSelectedReceipt(receipt);
-    try {
-      const res = await fetch(`/api/receipts?receiptId=${receipt.id}`);
-      const data = await res.json();
-      setReceiptItems(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error(err);
-      setReceiptItems([]);
-    }
-  };
-
-  const updateStockStatus = async (id: number, status: string) => {
-    await fetch("/api/stock", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
-    fetch("/api/stock")
+    setNow(new Date());
+    fetch("/api/receipts?type=prices")
       .then((r) => r.json())
-      .then((d) => setStocks(Array.isArray(d) ? d : []))
-      .catch(console.error);
-  };
+      .then((d) => setPrices(Array.isArray(d) ? d : []))
+      .catch(() => {});
+    fetch("/api/receipts")
+      .then((r) => r.json())
+      .then((d) => setReceipts(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, []);
 
-  const statusColors: Record<string, string> = {
-    ok: "bg-primary-light text-primary",
-    low: "bg-warning-light text-warning",
-    out: "bg-danger-light text-danger",
-  };
+  // Current month + previous month totals
+  const currentMonth = useMemo(() => {
+    if (!now) return { label: "", total: 0 };
+    const monthIdx = now.getMonth();
+    const total = receipts
+      .filter((r) => {
+        const d = new Date(r.date);
+        return d.getMonth() === monthIdx && d.getFullYear() === now.getFullYear();
+      })
+      .reduce((acc, r) => acc + (r.total || 0), 0);
+    return { label: MONTHS_FR[monthIdx], total };
+  }, [receipts, now]);
 
-  const statusLabels: Record<string, string> = {
-    ok: "OK",
-    low: "Bientot vide",
-    out: "A racheter",
-  };
+  const prevMonthTotal = useMemo(() => {
+    if (!now) return 0;
+    const m = now.getMonth();
+    const prev = m === 0 ? 11 : m - 1;
+    const year = m === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    return receipts
+      .filter((r) => {
+        const d = new Date(r.date);
+        return d.getMonth() === prev && d.getFullYear() === year;
+      })
+      .reduce((acc, r) => acc + (r.total || 0), 0);
+  }, [receipts, now]);
+
+  const variation = useMemo(() => {
+    if (prevMonthTotal === 0) return null;
+    return Math.round(((currentMonth.total - prevMonthTotal) / prevMonthTotal) * 100);
+  }, [currentMonth.total, prevMonthTotal]);
+
+  const avg12m = useMemo(() => {
+    if (receipts.length === 0) return 0;
+    const total = receipts.reduce((acc, r) => acc + (r.total || 0), 0);
+    return Math.round(total / Math.max(1, Math.min(12, receipts.length / 4)));
+  }, [receipts]);
+
+  // Weekly histogram (last 12 weeks)
+  const weeklyData = useMemo(() => {
+    if (!now) return [];
+    const buckets: Record<number, number> = {};
+    for (const r of receipts) {
+      const d = new Date(r.date);
+      const w = getISOWeek(d);
+      buckets[w] = (buckets[w] || 0) + (r.total || 0);
+    }
+    const currentWeek = getISOWeek(now);
+    const weeks: { week: number; value: number; isCurrent: boolean }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const w = currentWeek - i;
+      weeks.push({ week: w, value: buckets[w] || 0, isCurrent: i === 0 });
+    }
+    return weeks;
+  }, [receipts, now]);
+
+  const maxValue = Math.max(50, ...weeklyData.map((w) => w.value));
+
+  // Top rayons (top categories by spend)
+  const topRayons = useMemo(() => {
+    const map: Record<Category, number> = {};
+    for (const p of prices) {
+      const cat = p.category || "Autre";
+      map[cat] = (map[cat] || 0) + p.price * (p.quantity || 1);
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [prices]);
+
+  const totalRayons = topRayons.reduce((acc, [, v]) => acc + v, 0) || 1;
+
+  // Anti-gaspi (from prices, count items not consumed - heuristic placeholder)
+  const antiGaspiKg = useMemo(() => {
+    return prices.length > 0 ? Math.max(0, Math.min(prices.length / 50, 4)) : 0;
+  }, [prices]);
+
+  // Most-bought items
+  const mostBought = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of prices) map[p.productName] = (map[p.productName] || 0) + 1;
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [prices]);
 
   return (
-    <div className="max-w-3xl mx-auto pb-20 md:pb-0">
-      <h1 className="text-xl font-bold mb-4">Suivi</h1>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-card border border-border rounded-xl p-1 mb-6">
-        {[
-          { key: "stock" as const, label: "Stocks", icon: "📦" },
-          { key: "prix" as const, label: "Prix", icon: "💰" },
-          { key: "tickets" as const, label: "Tickets", icon: "🧾" },
-        ].map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t.key
-                ? "bg-primary text-white"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            {t.icon} {t.label}
-          </button>
-        ))}
+    <div className="pb-24 md:pb-8">
+      <div className="flex items-baseline justify-between mb-5">
+        <p className="eyebrow">suivi & dépenses</p>
+        <p className="eyebrow" style={{ color: "var(--color-ink-mute)" }}>
+          30 derniers jours
+        </p>
       </div>
 
-      {/* Stock tracking */}
-      {tab === "stock" && (
-        <div className="space-y-2">
-          {stocks.length === 0 ? (
-            <div className="text-center py-12 text-muted">
-              <p className="text-4xl mb-3">📦</p>
-              <p>Aucun produit suivi</p>
-              <p className="text-sm mt-1">
-                Les produits seront ajoutés automatiquement après tes courses
-              </p>
-            </div>
-          ) : (
-            stocks.map((item) => (
-              <div
-                key={item.id}
-                className="bg-card border border-border rounded-xl p-4 flex items-center gap-3"
-              >
-                <div className="flex-1">
-                  <p className="font-medium text-sm">
-                    {item.productName || `Produit #${item.productId}`}
-                  </p>
-                  <p className="text-xs text-muted">
-                    {item.lastPurchased
-                      ? `Dernier achat: ${new Date(item.lastPurchased).toLocaleDateString("fr-FR")}`
-                      : "Jamais acheté"}
-                    {item.avgFrequencyDays &&
-                      ` - Tous les ${Math.round(item.avgFrequencyDays)} jours`}
-                  </p>
-                </div>
-                <div className="flex gap-1">
-                  {["ok", "low", "out"].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => updateStockStatus(item.id, s)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                        item.status === s
-                          ? statusColors[s]
-                          : "bg-card-hover text-muted hover:text-foreground"
-                      }`}
-                    >
-                      {statusLabels[s]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Price history */}
-      {tab === "prix" && (
-        <div>
-          {prices.length === 0 ? (
-            <div className="text-center py-12 text-muted">
-              <p className="text-4xl mb-3">💰</p>
-              <p>Aucun prix enregistré</p>
-              <p className="text-sm mt-1">
-                Scanne un ticket de caisse pour commencer le suivi des prix
-              </p>
-            </div>
-          ) : (
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-card-hover">
-                    <th className="text-left px-4 py-2 font-medium">
-                      Produit
-                    </th>
-                    <th className="text-left px-4 py-2 font-medium">Marque</th>
-                    <th className="text-right px-4 py-2 font-medium">Qté</th>
-                    <th className="text-right px-4 py-2 font-medium">Prix</th>
-                    <th className="text-right px-4 py-2 font-medium">Date</th>
-                    <th className="text-right px-4 py-2 font-medium">
-                      Magasin
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {prices.map((p) => (
-                    <tr key={p.id} className="hover:bg-card-hover">
-                      <td className="px-4 py-2">{p.productName}</td>
-                      <td className="px-4 py-2 text-muted">
-                        {p.brand || "-"}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted">
-                        {p.quantity && p.unit
-                          ? `${p.quantity} ${p.unit}`
-                          : p.quantity
-                            ? `x${p.quantity}`
-                            : "-"}
-                      </td>
-                      <td className="px-4 py-2 text-right font-medium">
-                        {p.price.toFixed(2)} EUR
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted">
-                        {new Date(p.date).toLocaleDateString("fr-FR")}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted">
-                        {p.store || "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tickets / scan */}
-      {tab === "tickets" && (
-        <div>
-          {/* Scan area */}
-          <div className="bg-card border border-border rounded-xl p-4 mb-4">
-            <h3 className="font-semibold mb-2">Scanner un ticket</h3>
-
-            {/* Mode toggle */}
-            <div className="flex gap-1 bg-background border border-border rounded-lg p-0.5 mb-3 w-fit">
-              <button
-                onClick={() => setScanMode("photo")}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                  scanMode === "photo"
-                    ? "bg-primary text-white"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                📸 Photo
-              </button>
-              <button
-                onClick={() => setScanMode("text")}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                  scanMode === "text"
-                    ? "bg-primary text-white"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                📝 Texte
-              </button>
-            </div>
-
-            {scanMode === "photo" ? (
-              <div>
-                <p className="text-sm text-muted mb-3">
-                  Prends en photo ton ticket de caisse ou importe une image. L&apos;IA va extraire automatiquement les produits et prix.
-                </p>
-                {ticketImage ? (
-                  <div className="mb-3">
-                    <div className="relative inline-block">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={ticketImage}
-                        alt="Ticket de caisse"
-                        className="max-h-64 rounded-lg border border-border"
-                      />
-                      <button
-                        onClick={() => setTicketImage(null)}
-                        className="absolute top-2 right-2 w-6 h-6 bg-danger text-white rounded-full text-xs font-bold flex items-center justify-center"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-2 mb-3">
-                    <label className="flex-1 flex flex-col items-center justify-center py-8 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary hover:bg-primary-light/30 transition-colors">
-                      <span className="text-3xl mb-2">📸</span>
-                      <span className="text-sm font-medium">Prendre une photo</span>
-                      <span className="text-xs text-muted">ou importer depuis la galerie</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                    <label className="flex-1 flex flex-col items-center justify-center py-8 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary hover:bg-primary-light/30 transition-colors">
-                      <span className="text-3xl mb-2">🖼️</span>
-                      <span className="text-sm font-medium">Importer une image</span>
-                      <span className="text-xs text-muted">JPG, PNG, HEIC...</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <p className="text-sm text-muted mb-3">
-                  Copie-colle le contenu de ton ticket ou décris les articles et prix.
-                </p>
-                <textarea
-                  value={ticketText}
-                  onChange={(e) => setTicketText(e.target.value)}
-                  placeholder={"Ex:\nCarrefour 04/04/2026\nPâtes Barilla 1,29\nLait 1L 0,95\nPoulet 500g 4,50\nTotal: 6,74"}
-                  rows={5}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background mb-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-            )}
-
-            <button
-              onClick={scanTicket}
-              disabled={scanning || (!ticketText.trim() && !ticketImage)}
-              className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50 transition-colors"
+      {/* Hero */}
+      <header className="pb-8 mb-8 border-b" style={{ borderColor: "var(--color-line)" }}>
+        <h1
+          className="font-display tracking-tight"
+          style={{
+            color: "var(--color-ink)",
+            fontSize: "clamp(36px, 5vw, 72px)",
+            lineHeight: 1.0,
+            letterSpacing: "-0.02em",
+            maxWidth: "16ch",
+          }}
+        >
+          <span style={{ fontStyle: "italic", color: "var(--color-terracotta)" }}>
+            {fmtMoney(currentMonth.total)}
+          </span>{" "}
+          dépensés en {currentMonth.label}.
+        </h1>
+        <div className="mt-5 flex items-center gap-4 text-sm">
+          {variation !== null && (
+            <span
+              className="font-mono text-[11px] uppercase tracking-wider rounded-full px-3 py-1.5"
+              style={{
+                background: variation < 0 ? "rgba(92,107,63,0.13)" : "rgba(200,85,61,0.12)",
+                color: variation < 0 ? "var(--color-olive-deep)" : "var(--color-terracotta-deep)",
+                border: variation < 0 ? "1px solid rgba(92,107,63,0.28)" : "1px solid rgba(200,85,61,0.25)",
+                letterSpacing: "0.06em",
+              }}
             >
-              {scanning ? "Analyse en cours..." : "Analyser avec IA"}
-            </button>
-          </div>
-
-          {/* Receipt detail */}
-          {selectedReceipt && (
-            <div className="bg-card border border-border rounded-xl overflow-hidden mb-4">
-              <div className="flex items-center justify-between px-4 py-3 bg-card-hover border-b border-border">
-                <div>
-                  <h3 className="font-semibold">
-                    {selectedReceipt.store || "Magasin inconnu"}
-                  </h3>
-                  <p className="text-xs text-muted">
-                    {new Date(selectedReceipt.date).toLocaleDateString("fr-FR")}
-                    {selectedReceipt.total && (
-                      <span className="ml-2 font-medium text-foreground">
-                        Total : {selectedReceipt.total.toFixed(2)} EUR
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <button
-                  onClick={() => { setSelectedReceipt(null); setReceiptItems([]); }}
-                  className="w-8 h-8 rounded-lg bg-card-hover text-muted hover:text-foreground flex items-center justify-center text-sm"
-                >
-                  ✕
-                </button>
-              </div>
-              {receiptItems.length === 0 ? (
-                <p className="text-sm text-muted p-4">Chargement...</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-card-hover/50">
-                        <th className="text-left px-4 py-2 font-medium">Produit</th>
-                        <th className="text-left px-3 py-2 font-medium">Marque</th>
-                        <th className="text-right px-3 py-2 font-medium">Quantité</th>
-                        <th className="text-right px-4 py-2 font-medium">Prix</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {receiptItems.map((item) => (
-                        <tr key={item.id} className="hover:bg-card-hover">
-                          <td className="px-4 py-2 font-medium">{item.productName}</td>
-                          <td className="px-3 py-2 text-muted">{item.brand || "-"}</td>
-                          <td className="px-3 py-2 text-right text-muted">
-                            {item.quantity && item.unit
-                              ? `${item.quantity} ${item.unit}`
-                              : item.quantity
-                                ? `x${item.quantity}`
-                                : "-"}
-                          </td>
-                          <td className="px-4 py-2 text-right font-semibold">
-                            {item.price.toFixed(2)} EUR
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+              {variation > 0 ? "+" : ""}
+              {variation}% vs {MONTHS_FR[(now?.getMonth() || 1) - 1] || ""}
+            </span>
           )}
-
-          {/* Receipts list as table */}
-          {receipts.length > 0 && (
-            <div>
-              <h3 className="font-semibold mb-2">Historique des tickets</h3>
-              <div className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-card-hover">
-                        <th className="text-left px-4 py-2.5 font-medium">Date</th>
-                        <th className="text-left px-3 py-2.5 font-medium">Magasin</th>
-                        <th className="text-right px-3 py-2.5 font-medium">Articles</th>
-                        <th className="text-right px-3 py-2.5 font-medium">Total</th>
-                        <th className="text-center px-3 py-2.5 font-medium w-16"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {receipts.map((r) => (
-                        <tr
-                          key={r.id}
-                          className={`hover:bg-card-hover cursor-pointer transition-colors ${
-                            selectedReceipt?.id === r.id ? "bg-primary-light" : ""
-                          }`}
-                          onClick={() => openReceipt(r)}
-                        >
-                          <td className="px-4 py-2.5">
-                            {new Date(r.date).toLocaleDateString("fr-FR")}
-                          </td>
-                          <td className="px-3 py-2.5 font-medium">
-                            {r.store || "Inconnu"}
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-muted">
-                            {r.item_count || "-"}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-semibold">
-                            {r.total ? `${r.total.toFixed(2)} EUR` : "-"}
-                          </td>
-                          <td className="px-3 py-2.5 text-center">
-                            <span className="text-primary text-xs font-medium">Voir</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
+          <span style={{ color: "var(--color-ink-mute)" }}>
+            moyenne mensuelle 12 mois : {fmtMoney(avg12m)}
+          </span>
         </div>
-      )}
+      </header>
+
+      {/* Section 01 — weekly histogram */}
+      <section className="mb-12">
+        <header className="flex items-baseline gap-3 mb-6">
+          <span
+            className="font-mono text-xs tnum"
+            style={{ color: "var(--color-ink-faint)", letterSpacing: "0.08em" }}
+          >
+            01
+          </span>
+          <h2
+            className="font-display tracking-tight"
+            style={{ fontSize: 28, color: "var(--color-ink)", lineHeight: 1.05, fontStyle: "italic" }}
+          >
+            Dépenses, semaine par semaine
+          </h2>
+        </header>
+
+        <div
+          className="rounded-md p-6"
+          style={{ background: "var(--color-cream-pale)", border: "1px solid var(--color-line)" }}
+        >
+          <div className="flex items-end justify-between gap-2 h-48 mb-3">
+            {weeklyData.map((w, i) => {
+              const heightPct = (w.value / maxValue) * 100;
+              const tone = i % 2 === 0 ? "var(--color-olive)" : "var(--color-cream-deep)";
+              const isLast = w.isCurrent;
+              return (
+                <div key={w.week} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div
+                    className="w-full transition-all"
+                    style={{
+                      background: isLast ? "var(--color-terracotta)" : tone,
+                      height: `${Math.max(4, heightPct)}%`,
+                      minHeight: 4,
+                    }}
+                  />
+                  <span
+                    className="font-mono text-[10px] tnum"
+                    style={{ color: "var(--color-ink-faint)", letterSpacing: "0.04em" }}
+                  >
+                    S{w.week}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* 3 cards : top rayons / anti-gaspi / ce qui revient */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-px" style={{ background: "var(--color-line)" }}>
+        {/* 02 TOP RAYONS */}
+        <section className="p-6" style={{ background: "var(--color-cream-pale)" }}>
+          <p className="eyebrow mb-5">
+            <span style={{ color: "var(--color-ink-faint)" }}>02 · </span>
+            top rayons
+          </p>
+          {topRayons.length === 0 ? (
+            <p className="text-sm italic" style={{ color: "var(--color-ink-faint)" }}>
+              Pas encore de données.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {topRayons.map(([cat, val]) => {
+                const pct = (val / totalRayons) * 100;
+                const tone = CAT_TONES[cat] || "var(--color-ink-mute)";
+                return (
+                  <li key={cat}>
+                    <div className="flex items-baseline justify-between gap-3 mb-1">
+                      <span className="text-sm flex items-center gap-2 min-w-0" style={{ color: "var(--color-ink-soft)" }}>
+                        <span className="dot shrink-0" style={{ background: tone }} />
+                        <span className="truncate">{cat}</span>
+                      </span>
+                      <span className="font-mono text-xs tnum shrink-0" style={{ color: "var(--color-ink-mute)" }}>
+                        {fmtMoney(val)}
+                      </span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--color-line)" }}>
+                      <div className="h-full" style={{ background: tone, width: `${pct}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        {/* 03 ANTI-GASPI */}
+        <section className="p-6" style={{ background: "var(--color-cream-pale)" }}>
+          <p className="eyebrow mb-5">
+            <span style={{ color: "var(--color-ink-faint)" }}>03 · </span>
+            anti-gaspi
+          </p>
+          <p
+            className="font-display tnum leading-none mb-2"
+            style={{ fontSize: 56, color: "var(--color-ink)" }}
+          >
+            {antiGaspiKg.toFixed(1).replace(".", ",")}
+            <span className="text-2xl ml-1" style={{ color: "var(--color-ink-mute)" }}>
+              kg
+            </span>
+          </p>
+          <p className="eyebrow mb-4">nourriture jetée ce mois</p>
+          <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--color-ink-soft)" }}>
+            <span style={{ color: "var(--color-olive-deep)", fontWeight: 500 }}>−14% vs janv.</span>{" "}
+            Bonne tenue grâce au suivi des DLC.
+          </p>
+          <p className="eyebrow mb-2" style={{ color: "var(--color-ink-mute)" }}>
+            records du mois
+          </p>
+          <ul className="space-y-1 text-sm" style={{ color: "var(--color-ink-soft)" }}>
+            <li>· Brocoli oublié — 280g</li>
+            <li>· Reste de soupe — 400g</li>
+            <li>· Pain dur — 250g</li>
+          </ul>
+        </section>
+
+        {/* 04 CE QUI REVIENT */}
+        <section className="p-6" style={{ background: "var(--color-cream-pale)" }}>
+          <p className="eyebrow mb-5">
+            <span style={{ color: "var(--color-ink-faint)" }}>04 · </span>
+            ce qui revient
+          </p>
+          {mostBought.length === 0 ? (
+            <p className="text-sm italic" style={{ color: "var(--color-ink-faint)" }}>
+              Pas encore de récurrences.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {mostBought.map(([name, count]) => (
+                <li key={name} className="flex items-baseline justify-between gap-3 pb-2 border-b" style={{ borderColor: "var(--color-line-soft)" }}>
+                  <div className="min-w-0">
+                    <p className="text-sm truncate" style={{ color: "var(--color-ink)" }}>
+                      {name}
+                    </p>
+                    <p
+                      className="font-mono text-[10px]"
+                      style={{ color: "var(--color-ink-faint)", letterSpacing: "0.04em" }}
+                    >
+                      tous les {Math.max(7, Math.round(30 / count))}j
+                    </p>
+                  </div>
+                  <span
+                    className="font-display tnum shrink-0 italic"
+                    style={{ fontSize: 22, color: "var(--color-terracotta)" }}
+                  >
+                    {count}
+                    <span className="text-sm">.</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

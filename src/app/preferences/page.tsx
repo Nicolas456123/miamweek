@@ -1,6 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import {
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  Field,
+  PageHeader,
+  SectionTitle,
+} from "@/components/ui-kit";
 
 type Product = {
   id: number;
@@ -20,20 +29,30 @@ type Preference = {
   product_category: string | null;
 };
 
-const STATUS_CONFIG = {
-  dislike: { label: "N'aime pas", icon: "👎", color: "bg-orange-100 text-orange-700 border-orange-200" },
-  allergy: { label: "Allergie", icon: "⚠️", color: "bg-red-100 text-red-700 border-red-200" },
-  love: { label: "Adore", icon: "❤️", color: "bg-green-100 text-green-700 border-green-200" },
-} as const;
+type StatusKey = "dislike" | "allergy" | "love";
+type ChipTone = "neutral" | "terra" | "olive" | "mustard" | "ink";
+
+const STATUS_CONFIG: Record<StatusKey, { label: string; tone: ChipTone }> = {
+  dislike: { label: "N'aime pas", tone: "mustard" },
+  allergy: { label: "Allergie", tone: "terra" },
+  love: { label: "Adore", tone: "olive" },
+};
 
 export default function PreferencesPage() {
   const [preferences, setPreferences] = useState<Preference[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
-  const [addingStatus, setAddingStatus] = useState<string | null>(null);
+  const [addingStatus, setAddingStatus] = useState<StatusKey | null>(null);
   const [customName, setCustomName] = useState("");
   const [customNote, setCustomNote] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<StatusKey | "">("");
+
+  const fetchPreferences = () => {
+    fetch("/api/preferences")
+      .then((r) => r.json())
+      .then((data) => setPreferences(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  };
 
   useEffect(() => {
     fetchPreferences();
@@ -42,13 +61,6 @@ export default function PreferencesPage() {
       .then((data) => setProducts(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
-
-  const fetchPreferences = () => {
-    fetch("/api/preferences")
-      .then((r) => r.json())
-      .then((data) => setPreferences(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  };
 
   const addPreference = async (product: Product, status: string) => {
     await fetch("/api/preferences", {
@@ -116,81 +128,113 @@ export default function PreferencesPage() {
   }, [preferences, filterStatus]);
 
   const grouped = useMemo(() => {
-    const groups: Record<string, Preference[]> = { allergy: [], dislike: [], love: [] };
+    const groups: Record<StatusKey, Preference[]> = { allergy: [], dislike: [], love: [] };
     for (const pref of filteredPreferences) {
-      if (!groups[pref.status]) groups[pref.status] = [];
-      groups[pref.status].push(pref);
+      const key = pref.status as StatusKey;
+      if (groups[key]) groups[key].push(pref);
     }
     return groups;
   }, [filteredPreferences]);
 
+  const dotForTone: Record<ChipTone, string> = {
+    neutral: "dot-ink",
+    terra: "dot-terra",
+    olive: "dot-olive",
+    mustard: "dot-mustard",
+    ink: "dot-ink",
+  };
+
   return (
-    <div className="max-w-3xl mx-auto pb-20 md:pb-0">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-bold">Mes préférences</h1>
-          <p className="text-sm text-muted">
-            Indique ce que tu aimes, n&apos;aimes pas ou ne peux pas manger
-          </p>
-        </div>
+    <div className="max-w-3xl mx-auto pb-24 md:pb-8">
+      <PageHeader
+        eyebrow="préférences"
+        title={
+          <>
+            Mes <span style={{ fontStyle: "italic", color: "var(--color-terracotta)" }}>goûts</span>
+          </>
+        }
+        subtitle="Indique ce que tu aimes, n'aimes pas ou ne peux pas manger."
+      />
+
+      {/* Summary tiles — filter toggles */}
+      <div className="grid grid-cols-3 gap-px mb-6" style={{ background: "var(--color-line)" }}>
+        {(Object.entries(STATUS_CONFIG) as [StatusKey, typeof STATUS_CONFIG[StatusKey]][]).map(
+          ([key, cfg]) => {
+            const count = preferences.filter((p) => p.status === key).length;
+            const isActive = filterStatus === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setFilterStatus(isActive ? "" : key)}
+                className="p-5 text-left transition-colors"
+                style={{
+                  background: isActive
+                    ? "var(--color-ink)"
+                    : "var(--color-cream-pale)",
+                  color: isActive
+                    ? "var(--color-cream-pale)"
+                    : "var(--color-ink)",
+                }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`dot ${dotForTone[cfg.tone]}`} />
+                  <span
+                    className="eyebrow"
+                    style={{
+                      color: isActive ? "var(--color-cream-deep)" : undefined,
+                    }}
+                  >
+                    {cfg.label}
+                  </span>
+                </div>
+                <p className="font-display text-4xl tnum leading-none">
+                  {String(count).padStart(2, "0")}
+                </p>
+              </button>
+            );
+          }
+        )}
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        {(Object.entries(STATUS_CONFIG) as [string, typeof STATUS_CONFIG[keyof typeof STATUS_CONFIG]][]).map(([key, cfg]) => {
-          const count = preferences.filter((p) => p.status === key).length;
-          return (
-            <button
-              key={key}
-              onClick={() => setFilterStatus(filterStatus === key ? "" : key)}
-              className={`p-3 rounded-xl border text-center transition-all ${
-                filterStatus === key ? cfg.color : "bg-card border-border hover:shadow-sm"
-              }`}
-            >
-              <span className="text-xl">{cfg.icon}</span>
-              <p className="font-bold text-lg">{count}</p>
-              <p className="text-xs text-muted">{cfg.label}</p>
-            </button>
-          );
-        })}
-      </div>
+      {/* Add preference */}
+      <Card variant="default" padding="lg" className="mb-6">
+        <SectionTitle>Ajouter une préférence</SectionTitle>
 
-      {/* Add section */}
-      <div className="mb-4 bg-card border border-border rounded-xl p-4">
-        <h3 className="font-semibold text-sm mb-3">Ajouter une préférence</h3>
-
-        {/* Status selector */}
-        <div className="flex gap-2 mb-3">
-          {(Object.entries(STATUS_CONFIG) as [string, typeof STATUS_CONFIG[keyof typeof STATUS_CONFIG]][]).map(([key, cfg]) => (
-            <button
-              key={key}
-              onClick={() => setAddingStatus(addingStatus === key ? null : key)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                addingStatus === key
-                  ? cfg.color
-                  : "bg-background border-border text-muted hover:text-foreground"
-              }`}
-            >
-              {cfg.icon} {cfg.label}
-            </button>
-          ))}
+        <div className="flex gap-2 mb-4">
+          {(Object.entries(STATUS_CONFIG) as [StatusKey, typeof STATUS_CONFIG[StatusKey]][]).map(
+            ([key, cfg]) => {
+              const isSel = addingStatus === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setAddingStatus(isSel ? null : key)}
+                  className="flex-1 py-2.5 rounded-md text-sm transition-colors border"
+                  style={{
+                    background: isSel ? "var(--color-ink)" : "var(--color-cream-pale)",
+                    color: isSel ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
+                    borderColor: isSel ? "var(--color-ink)" : "var(--color-line)",
+                  }}
+                >
+                  <span className={`dot ${dotForTone[cfg.tone]} mr-2`} />
+                  {cfg.label}
+                </button>
+              );
+            }
+          )}
         </div>
 
         {addingStatus && (
-          <>
-            {/* Search products */}
-            <input
+          <div className="space-y-3">
+            <Field
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un aliment..."
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="Rechercher un aliment…"
               autoFocus
             />
 
-            {/* Product suggestions */}
             {filteredProducts.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {filteredProducts.map((product) => (
                   <button
                     key={product.id}
@@ -198,55 +242,56 @@ export default function PreferencesPage() {
                       addPreference(product, addingStatus);
                       setSearch("");
                     }}
-                    className="p-2 rounded-lg border border-border bg-background hover:border-primary text-left text-sm transition-colors"
+                    className="px-3 py-2 rounded-md border text-left text-sm transition-colors hover:bg-[var(--color-cream-deep)]"
+                    style={{
+                      background: "var(--color-cream-pale)",
+                      borderColor: "var(--color-line)",
+                      color: "var(--color-ink-soft)",
+                    }}
                   >
-                    <span>{product.icon || "🛒"}</span>{" "}
-                    <span className="text-xs">{product.name}</span>
+                    {product.name}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* Custom input */}
-            <div className="flex gap-2">
+            <div className="flex flex-col md:flex-row gap-2 pt-2 border-t" style={{ borderColor: "var(--color-line)" }}>
               <input
                 type="text"
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addCustomPreference()}
-                placeholder="Ou tape un aliment personnalisé..."
-                className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm"
+                placeholder="Ou tape un aliment personnalisé…"
+                className="flex-1 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
               />
               <input
                 type="text"
                 value={customNote}
                 onChange={(e) => setCustomNote(e.target.value)}
                 placeholder="Note (optionnel)"
-                className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm"
+                className="md:w-48 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
               />
-              <button
+              <Button
+                variant="primary"
+                size="md"
                 onClick={addCustomPreference}
                 disabled={!customName.trim()}
-                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 Ajouter
-              </button>
+              </Button>
             </div>
-          </>
+          </div>
         )}
-      </div>
+      </Card>
 
       {/* Preferences list */}
       {preferences.length === 0 ? (
-        <div className="text-center py-16 text-muted">
-          <p className="text-5xl mb-4">🍽️</p>
-          <p className="text-lg font-medium">Aucune préférence enregistrée</p>
-          <p className="text-sm mt-1">
-            Clique sur un statut ci-dessus puis cherche un aliment
-          </p>
-        </div>
+        <EmptyState
+          title="Aucune préférence"
+          description="Choisis un statut ci-dessus puis cherche un aliment pour démarrer."
+        />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {(["allergy", "dislike", "love"] as const).map((statusKey) => {
             const items = grouped[statusKey] || [];
             if (items.length === 0) return null;
@@ -254,42 +299,62 @@ export default function PreferencesPage() {
 
             return (
               <div key={statusKey}>
-                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                  <span>{cfg.icon}</span>
+                <SectionTitle count={items.length}>
+                  <span className={`dot ${dotForTone[cfg.tone]}`} />
                   {cfg.label}
-                  <span className="text-xs font-normal text-muted">({items.length})</span>
-                </h3>
+                </SectionTitle>
                 <div className="flex flex-wrap gap-2">
                   {items.map((pref) => (
                     <div
                       key={pref.id}
-                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm group ${cfg.color}`}
+                      className="group inline-flex items-center gap-2 rounded-full border text-sm pl-3 pr-2 py-1"
+                      style={{
+                        background: "var(--color-cream-pale)",
+                        borderColor: "var(--color-line)",
+                        color: "var(--color-ink-soft)",
+                      }}
                     >
-                      <span>{pref.icon || "🍽️"}</span>
-                      <span className="font-medium">{pref.product_name}</span>
+                      <span className={`dot ${dotForTone[cfg.tone]}`} />
+                      <span className="font-medium" style={{ color: "var(--color-ink)" }}>
+                        {pref.product_name}
+                      </span>
                       {pref.note && (
-                        <span className="text-xs opacity-70">({pref.note})</span>
+                        <span
+                          className="text-xs"
+                          style={{ color: "var(--color-ink-mute)" }}
+                        >
+                          ({pref.note})
+                        </span>
                       )}
-                      {/* Quick status switcher */}
-                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {Object.keys(STATUS_CONFIG)
+                      <div className="flex gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {(Object.keys(STATUS_CONFIG) as StatusKey[])
                           .filter((s) => s !== pref.status)
                           .map((s) => (
                             <button
                               key={s}
                               onClick={() => updateStatus(pref.id, s)}
-                              className="text-xs hover:scale-110 transition-transform"
-                              title={STATUS_CONFIG[s as keyof typeof STATUS_CONFIG].label}
+                              className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                              style={{
+                                background: "var(--color-cream-deep)",
+                                color: "var(--color-ink-mute)",
+                                letterSpacing: "0.04em",
+                              }}
+                              title={`Passer en ${STATUS_CONFIG[s].label.toLowerCase()}`}
                             >
-                              {STATUS_CONFIG[s as keyof typeof STATUS_CONFIG].icon}
+                              <span className={`dot ${dotForTone[STATUS_CONFIG[s].tone]} mr-1`} />
+                              {STATUS_CONFIG[s].label}
                             </button>
                           ))}
                         <button
                           onClick={() => removePreference(pref.id)}
-                          className="text-xs hover:scale-110 transition-transform ml-1"
+                          className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                          style={{
+                            background: "var(--color-cream-deep)",
+                            color: "var(--color-ink-mute)",
+                          }}
                           title="Supprimer"
                         >
-                          ✕
+                          ×
                         </button>
                       </div>
                     </div>

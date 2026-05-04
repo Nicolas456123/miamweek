@@ -104,6 +104,34 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const recipeId = parseInt(id, 10);
+    const body = await request.json();
+    const { photo_url, photo_credit } = body;
+
+    const updateResult = await query(
+      "UPDATE recipes SET photo_url = ?, photo_credit = ? WHERE id = ? RETURNING *",
+      [photo_url || null, photo_credit || null, recipeId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return Response.json({ error: "Recipe not found" }, { status: 404 });
+    }
+
+    return Response.json(updateResult.rows[0]);
+  } catch {
+    return Response.json(
+      { error: "Failed to patch recipe" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

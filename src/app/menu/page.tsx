@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useToast } from "@/components/toast";
 
 type Recipe = {
   id: number;
@@ -11,17 +12,15 @@ type Recipe = {
   ingredients: { name: string; quantity: number | null; unit: string | null; category: string | null }[];
 };
 
-type Suggestion = {
-  name: string;
-  description: string;
-};
+type Suggestion = { name: string; description: string };
+
+const NUMERALS_FR = ["zéro", "une", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix"];
 
 export default function MenuPage() {
+  const { toast } = useToast();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedPlat, setSelectedPlat] = useState<Recipe | null>(null);
-  const [wantEntree, setWantEntree] = useState(true);
-  const [wantDessert, setWantDessert] = useState(true);
-  const [wantBoisson, setWantBoisson] = useState(true);
+  const [persons, setPersons] = useState(3);
   const [suggestions, setSuggestions] = useState<{
     entree?: Suggestion;
     dessert?: Suggestion;
@@ -29,14 +28,6 @@ export default function MenuPage() {
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [addedToList, setAddedToList] = useState(false);
-  const [includeEntree, setIncludeEntree] = useState(true);
-  const [includePlat, setIncludePlat] = useState(true);
-  const [includeDessert, setIncludeDessert] = useState(true);
-  const [includeBoisson, setIncludeBoisson] = useState(true);
-  const [planningDay, setPlanningDay] = useState(0);
-  const [planningMeal, setPlanningMeal] = useState<"lunch" | "dinner">("dinner");
-  const [addedToPlanning, setAddedToPlanning] = useState(false);
 
   useEffect(() => {
     fetch("/api/recipes")
@@ -55,9 +46,9 @@ export default function MenuPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           platName: selectedPlat.name,
-          wantEntree,
-          wantDessert,
-          wantBoisson,
+          wantEntree: true,
+          wantDessert: true,
+          wantBoisson: true,
         }),
       });
       const data = await res.json();
@@ -71,472 +62,291 @@ export default function MenuPage() {
   const addMenuToList = async () => {
     if (!selectedPlat) return;
     const menuLabel = `Menu: ${selectedPlat.name}`;
-
-    // Add plat principal ingredients
-    if (includePlat) {
-      for (const ing of selectedPlat.ingredients) {
-        await fetch("/api/list", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            productName: ing.name,
-            quantity: ing.quantity || 1,
-            unit: ing.unit || "pcs",
-            category: ing.category || "Autre",
-            source: "recipe",
-            listStatus: "prep",
-            sourceRecipe: menuLabel,
-          }),
-        });
-      }
+    for (const ing of selectedPlat.ingredients) {
+      await fetch("/api/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName: ing.name,
+          quantity: ing.quantity || 1,
+          unit: ing.unit || "pcs",
+          category: ing.category || "Autre",
+          source: "recipe",
+          listStatus: "prep",
+          sourceRecipe: menuLabel,
+        }),
+      });
     }
-    // Helper: add recipe ingredients or fallback to generic name
-    const addRecipeOrName = async (name: string, label: string) => {
-      const matched = recipes.find((r) => r.name.toLowerCase() === name.toLowerCase());
-      if (matched && matched.ingredients.length > 0) {
-        // Add each ingredient individually
-        for (const ing of matched.ingredients) {
-          await fetch("/api/list", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productName: ing.name,
-              quantity: ing.quantity || 1,
-              unit: ing.unit || "pcs",
-              category: ing.category || "Autre",
-              source: "recipe", listStatus: "prep", sourceRecipe: `${menuLabel} — ${name}`,
-            }),
-          });
-        }
-      } else {
-        // No matching recipe — add as generic item
-        await fetch("/api/list", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            productName: `${label}: ${name}`,
-            quantity: 1, unit: "pcs", category: "Autre",
-            source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
-          }),
-        });
-      }
-    };
-
-    if (includeEntree && suggestions?.entree) {
-      await addRecipeOrName(suggestions.entree.name, "Entrée");
+    if (suggestions?.entree) {
+      await fetch("/api/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName: `Entrée: ${suggestions.entree.name}`,
+          quantity: 1,
+          unit: "pcs",
+          category: "Autre",
+          source: "recipe",
+          listStatus: "prep",
+          sourceRecipe: menuLabel,
+        }),
+      });
     }
-    if (includeDessert && suggestions?.dessert) {
-      await addRecipeOrName(suggestions.dessert.name, "Dessert");
+    if (suggestions?.dessert) {
+      await fetch("/api/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName: `Dessert: ${suggestions.dessert.name}`,
+          quantity: 1,
+          unit: "pcs",
+          category: "Autre",
+          source: "recipe",
+          listStatus: "prep",
+          sourceRecipe: menuLabel,
+        }),
+      });
     }
-    if (includeBoisson && suggestions?.boisson) {
+    if (suggestions?.boisson) {
       await fetch("/api/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName: `Boisson: ${suggestions.boisson.name}`,
-          quantity: 1, unit: "bout.", category: "Boissons",
-          source: "recipe", listStatus: "prep", sourceRecipe: menuLabel,
+          quantity: 1,
+          unit: "bout.",
+          category: "Boissons",
+          source: "recipe",
+          listStatus: "prep",
+          sourceRecipe: menuLabel,
         }),
       });
     }
-    setAddedToList(true);
-  };
-
-  // Compute the actual date from the grid index (0-13), starting from today
-  const getDateFromGridIndex = (idx: number) => {
-    const today = new Date();
-    const d = new Date(today);
-    d.setDate(today.getDate() + idx);
-    return d;
-  };
-
-  const addToPlanning = async () => {
-    if (!selectedPlat) return;
-    const targetDate = getDateFromGridIndex(planningDay);
-    const dow = targetDate.getDay();
-    const dayOfWeek = dow === 0 ? 6 : dow - 1;
-    // Get Monday of target week
-    const monday = new Date(targetDate);
-    const mDow = monday.getDay();
-    monday.setDate(monday.getDate() - mDow + (mDow === 0 ? -6 : 1));
-    const weekStart = monday.toISOString().split("T")[0];
-    const baseType = planningMeal;
-
-    // Helper: try to match a suggestion name with an existing recipe
-    const matchRecipe = (name: string) =>
-      recipes.find((r) => r.name.toLowerCase() === name.toLowerCase());
-
-    if (includeEntree && suggestions?.entree) {
-      const matched = matchRecipe(suggestions.entree.name);
-      await fetch("/api/meal-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          weekStart, dayOfWeek,
-          mealType: `${baseType}_entree`,
-          recipeId: matched?.id || null,
-          customName: suggestions.entree.name,
-        }),
-      });
-    }
-    if (includePlat) {
-      await fetch("/api/meal-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          weekStart, dayOfWeek,
-          mealType: `${baseType}_plat`,
-          recipeId: selectedPlat.id,
-          customName: selectedPlat.name,
-        }),
-      });
-    }
-    if (includeDessert && suggestions?.dessert) {
-      const matched = matchRecipe(suggestions.dessert.name);
-      await fetch("/api/meal-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          weekStart, dayOfWeek,
-          mealType: `${baseType}_dessert`,
-          recipeId: matched?.id || null,
-          customName: suggestions.dessert.name,
-        }),
-      });
-    }
-    if (includeBoisson && suggestions?.boisson) {
-      await fetch("/api/meal-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          weekStart, dayOfWeek,
-          mealType: `${baseType}_boisson`,
-          customName: suggestions.boisson.name,
-        }),
-      });
-    }
-    setAddedToPlanning(true);
+    toast("Menu ajouté à la liste de courses.");
   };
 
   const filteredRecipes = search
     ? recipes.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()))
-    : recipes;
+    : recipes.slice(0, 12);
+
+  const personsLabel = persons >= 0 && persons < NUMERALS_FR.length ? NUMERALS_FR[persons] : String(persons);
+
+  const courses = [
+    { key: "entree", label: "Entrée", tone: "olive" as const, suggestion: suggestions?.entree, info: "léger · 15 min" },
+    {
+      key: "plat",
+      label: "Plat",
+      tone: "terra" as const,
+      suggestion: selectedPlat ? { name: selectedPlat.name, description: selectedPlat.description || "" } : undefined,
+      info: selectedPlat ? `${selectedPlat.category || "—"} · ${selectedPlat.servings} pers.` : "à choisir",
+    },
+    { key: "dessert", label: "Dessert", tone: "mustard" as const, suggestion: suggestions?.dessert, info: "douceur · 30 min" },
+  ];
 
   return (
-    <div className="max-w-2xl mx-auto pb-20 md:pb-0">
-      <h1 className="text-xl font-bold mb-4">Composer un menu</h1>
+    <div className="pb-24 md:pb-8">
+      <p className="eyebrow mb-5">menu</p>
 
-      {/* Step 1: Choose main dish */}
-      <div className="bg-card border border-border rounded-xl p-4 mb-4">
-        <h2 className="font-semibold mb-3 flex items-center gap-2">
-          <span className="w-6 h-6 bg-primary text-white rounded-full text-xs flex items-center justify-center font-bold">1</span>
-          Choisis ton plat principal
-        </h2>
+      {/* Hero */}
+      <header className="pb-8 mb-8 border-b" style={{ borderColor: "var(--color-line)" }}>
+        <h1
+          className="font-display tracking-tight"
+          style={{
+            color: "var(--color-ink)",
+            fontSize: "clamp(36px, 5vw, 72px)",
+            lineHeight: 1.0,
+            letterSpacing: "-0.02em",
+            maxWidth: "18ch",
+          }}
+        >
+          Un repas en trois temps, pour{" "}
+          <span style={{ fontStyle: "italic", color: "var(--color-terracotta)" }}>
+            {personsLabel} personne{persons > 1 ? "s" : ""}.
+          </span>
+        </h1>
 
+        <div className="mt-5 flex items-center gap-3 text-sm">
+          <span className="eyebrow">portions</span>
+          <div
+            className="inline-flex items-center gap-1 rounded-full px-3 py-1.5"
+            style={{ background: "var(--color-cream-pale)", border: "1px solid var(--color-line)" }}
+          >
+            <button
+              onClick={() => setPersons((p) => Math.max(1, p - 1))}
+              className="font-mono text-sm w-5"
+              style={{ color: "var(--color-ink-mute)" }}
+            >
+              −
+            </button>
+            <span className="font-mono text-sm tnum" style={{ minWidth: 16, textAlign: "center" }}>
+              {persons}
+            </span>
+            <button
+              onClick={() => setPersons((p) => p + 1)}
+              className="font-mono text-sm w-5"
+              style={{ color: "var(--color-ink-mute)" }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* 3 dish cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-px mb-8" style={{ background: "var(--color-line)" }}>
+        {courses.map((course, idx) => (
+          <section key={course.key} className="p-6" style={{ background: "var(--color-cream-pale)" }}>
+            <header className="flex items-baseline gap-3 mb-4">
+              <span
+                className="font-mono text-xs tnum"
+                style={{ color: "var(--color-ink-faint)", letterSpacing: "0.08em" }}
+              >
+                {String(idx + 1).padStart(2, "0")}
+              </span>
+              <h2
+                className="font-display tracking-tight"
+                style={{ fontSize: 28, color: "var(--color-ink)", lineHeight: 1.05, fontStyle: "italic" }}
+              >
+                {course.label}
+              </h2>
+            </header>
+
+            <div
+              className={`placeholder-img placeholder-img-${course.tone} aspect-[4/3] mb-4`}
+            >
+              {course.suggestion?.name?.slice(0, 22) || "à composer"}
+            </div>
+
+            {course.suggestion ? (
+              <>
+                <p
+                  className="font-display text-2xl leading-tight mb-2 tracking-tight"
+                  style={{ color: "var(--color-ink)" }}
+                >
+                  {course.suggestion.name}
+                </p>
+                {course.suggestion.description && (
+                  <p
+                    className="text-sm leading-relaxed mb-3"
+                    style={{ color: "var(--color-ink-mute)" }}
+                  >
+                    {course.suggestion.description}
+                  </p>
+                )}
+                <span
+                  className="font-mono text-[10px] uppercase rounded-full px-2.5 py-1 inline-block"
+                  style={{
+                    background: "var(--color-cream-deep)",
+                    color: "var(--color-ink-soft)",
+                    border: "1px solid var(--color-line)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  {course.info}
+                </span>
+              </>
+            ) : (
+              <p className="text-sm italic" style={{ color: "var(--color-ink-faint)" }}>
+                {course.key === "plat"
+                  ? "Choisis un plat principal ci-dessous."
+                  : selectedPlat
+                  ? "Demande une suggestion à l'IA."
+                  : "Choisis d'abord un plat principal."}
+              </p>
+            )}
+          </section>
+        ))}
+      </div>
+
+      {/* Plat picker */}
+      <section className="mb-8">
+        <header className="flex items-baseline gap-3 mb-4">
+          <span
+            className="font-mono text-xs tnum"
+            style={{ color: "var(--color-ink-faint)", letterSpacing: "0.08em" }}
+          >
+            04
+          </span>
+          <h2
+            className="font-display tracking-tight"
+            style={{ fontSize: 24, color: "var(--color-ink)", lineHeight: 1.05, fontStyle: "italic" }}
+          >
+            Choisir le plat principal
+          </h2>
+        </header>
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher une recette..."
-          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          placeholder="Rechercher une recette…"
+          className="w-full bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm mb-3 focus:outline-none focus:border-[var(--color-terracotta)]"
         />
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto">
+        <div className="flex flex-wrap gap-2">
           {filteredRecipes
             .filter((r) => r.category !== "Dessert")
-            .map((recipe) => (
-              <button
-                key={recipe.id}
-                onClick={() => {
-                  setSelectedPlat(recipe);
-                  setSuggestions(null);
-                  setAddedToList(false);
-                }}
-                className={`p-3 rounded-xl border text-left text-sm transition-all ${
-                  selectedPlat?.id === recipe.id
-                    ? "bg-primary-light border-primary"
-                    : "bg-background border-border hover:border-primary"
-                }`}
-              >
-                <p className="font-medium truncate">{recipe.name}</p>
-                {recipe.category && (
-                  <p className="text-xs text-muted">{recipe.category}</p>
-                )}
-              </button>
-            ))}
-        </div>
-      </div>
-
-      {/* Step 2: Choose what to accompany */}
-      {selectedPlat && (
-        <div className="bg-card border border-border rounded-xl p-4 mb-4">
-          <h2 className="font-semibold mb-3 flex items-center gap-2">
-            <span className="w-6 h-6 bg-primary text-white rounded-full text-xs flex items-center justify-center font-bold">2</span>
-            Que veux-tu avec &quot;{selectedPlat.name}&quot; ?
-          </h2>
-
-          <div className="flex flex-wrap gap-3 mb-4">
-            {[
-              { key: "entree", label: "Entrée", icon: "🥗", state: wantEntree, set: setWantEntree },
-              { key: "dessert", label: "Dessert", icon: "🍰", state: wantDessert, set: setWantDessert },
-              { key: "boisson", label: "Boisson", icon: "🍷", state: wantBoisson, set: setWantBoisson },
-            ].map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => opt.set(!opt.state)}
-                className={`px-4 py-3 rounded-xl border text-sm font-medium flex items-center gap-2 transition-colors ${
-                  opt.state
-                    ? "bg-primary-light border-primary text-primary"
-                    : "bg-background border-border text-muted"
-                }`}
-              >
-                <span className="text-xl">{opt.icon}</span>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={getSuggestions}
-            disabled={loading || (!wantEntree && !wantDessert && !wantBoisson)}
-            className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover disabled:opacity-50 transition-colors"
-          >
-            {loading ? "Recherche d'associations..." : "Suggérer des associations"}
-          </button>
-        </div>
-      )}
-
-      {/* Step 3: Suggestions with toggles */}
-      {suggestions && (
-        <div className="bg-card border-2 border-primary/30 rounded-xl p-4 mb-4">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
-            <span className="w-6 h-6 bg-primary text-white rounded-full text-xs flex items-center justify-center font-bold">3</span>
-            Menu suggéré
-            <span className="text-xs text-muted font-normal ml-auto">Coche ce que tu veux</span>
-          </h2>
-
-          <div className="space-y-3">
-            {suggestions.entree && (
-              <button
-                onClick={() => setIncludeEntree(!includeEntree)}
-                className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
-                  includeEntree
-                    ? "bg-green-50 border-2 border-green-300"
-                    : "bg-gray-50 border-2 border-transparent opacity-50"
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
-                  includeEntree ? "bg-green-500 border-green-500 text-white" : "border-gray-300"
-                }`}>
-                  {includeEntree && "✓"}
-                </div>
-                <span className="text-2xl shrink-0">🥗</span>
-                <div>
-                  <p className="text-xs font-semibold text-green-600 uppercase">Entrée</p>
-                  <p className="font-medium text-sm">{suggestions.entree.name}</p>
-                  <p className="text-xs text-muted">{suggestions.entree.description}</p>
-                </div>
-              </button>
-            )}
-
-            <button
-              onClick={() => setIncludePlat(!includePlat)}
-              className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
-                includePlat
-                  ? "bg-orange-50 border-2 border-orange-300"
-                  : "bg-gray-50 border-2 border-transparent opacity-50"
-              }`}
-            >
-              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
-                includePlat ? "bg-orange-500 border-orange-500 text-white" : "border-gray-300"
-              }`}>
-                {includePlat && "✓"}
-              </div>
-              <span className="text-2xl shrink-0">🍽️</span>
-              <div>
-                <p className="text-xs font-semibold text-orange-600 uppercase">Plat principal</p>
-                <p className="font-medium text-sm">{selectedPlat?.name}</p>
-                <p className="text-xs text-muted">{selectedPlat?.description}</p>
-              </div>
-            </button>
-
-            {suggestions.dessert && (
-              <button
-                onClick={() => setIncludeDessert(!includeDessert)}
-                className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
-                  includeDessert
-                    ? "bg-pink-50 border-2 border-pink-300"
-                    : "bg-gray-50 border-2 border-transparent opacity-50"
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
-                  includeDessert ? "bg-pink-500 border-pink-500 text-white" : "border-gray-300"
-                }`}>
-                  {includeDessert && "✓"}
-                </div>
-                <span className="text-2xl shrink-0">🍰</span>
-                <div>
-                  <p className="text-xs font-semibold text-pink-600 uppercase">Dessert</p>
-                  <p className="font-medium text-sm">{suggestions.dessert.name}</p>
-                  <p className="text-xs text-muted">{suggestions.dessert.description}</p>
-                </div>
-              </button>
-            )}
-
-            {suggestions.boisson && (
-              <button
-                onClick={() => setIncludeBoisson(!includeBoisson)}
-                className={`w-full flex items-start gap-3 rounded-xl p-3 text-left transition-all ${
-                  includeBoisson
-                    ? "bg-blue-50 border-2 border-blue-300"
-                    : "bg-gray-50 border-2 border-transparent opacity-50"
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mt-0.5 shrink-0 ${
-                  includeBoisson ? "bg-blue-500 border-blue-500 text-white" : "border-gray-300"
-                }`}>
-                  {includeBoisson && "✓"}
-                </div>
-                <span className="text-2xl shrink-0">🍷</span>
-                <div>
-                  <p className="text-xs font-semibold text-blue-600 uppercase">Boisson</p>
-                  <p className="font-medium text-sm">{suggestions.boisson.name}</p>
-                  <p className="text-xs text-muted">{suggestions.boisson.description}</p>
-                </div>
-              </button>
-            )}
-          </div>
-
-          {/* Planning grid picker */}
-          <div className="mt-4 pt-4 border-t border-border">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium">Placer sur le planning</p>
-              {addedToPlanning && (
-                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
-                  Planifié !
-                </span>
-              )}
-            </div>
-            {(() => {
-              // Build 14 days starting from today
-              const today = new Date();
-              const days: { date: Date; dayOfWeek: number; weekStart: string; label: string; dateLabel: string; isToday: boolean }[] = [];
-              for (let i = 0; i < 14; i++) {
-                const d = new Date(today);
-                d.setDate(today.getDate() + i);
-                const dow = d.getDay();
-                const dayOfWeek = dow === 0 ? 6 : dow - 1; // 0=lundi
-                const monday = new Date(d);
-                const mDow = monday.getDay();
-                monday.setDate(monday.getDate() - mDow + (mDow === 0 ? -6 : 1));
-                days.push({
-                  date: d,
-                  dayOfWeek,
-                  weekStart: monday.toISOString().split("T")[0],
-                  label: ["L", "M", "Me", "J", "V", "S", "D"][dayOfWeek],
-                  dateLabel: d.toLocaleDateString("fr-FR", { day: "numeric" }),
-                  isToday: d.toDateString() === today.toDateString(),
-                });
-              }
-
+            .map((r) => {
+              const active = selectedPlat?.id === r.id;
               return (
-                <div className="overflow-x-auto">
-                  <div className="inline-grid gap-0.5" style={{ gridTemplateColumns: `auto repeat(${days.length}, 1fr)` }}>
-                    {/* Header row: day labels */}
-                    <div />
-                    {days.map((d, i) => (
-                      <div key={`h-${i}`} className="text-center px-1">
-                        <span className={`text-[10px] font-bold block ${d.isToday ? "text-primary" : "text-muted"}`}>
-                          {d.label}
-                        </span>
-                        <span className={`text-[10px] block ${d.isToday ? "text-primary font-bold" : "text-muted"}`}>
-                          {d.dateLabel}
-                        </span>
-                      </div>
-                    ))}
-
-                    {/* Midi row */}
-                    <span className="text-[10px] text-muted font-medium pr-1 self-center">Midi</span>
-                    {days.map((d, i) => {
-                      const sel = planningDay === i && planningMeal === "lunch";
-                      return (
-                        <button
-                          key={`l-${i}`}
-                          onClick={() => {
-                            setPlanningDay(i);
-                            setPlanningMeal("lunch");
-                            setAddedToPlanning(false);
-                          }}
-                          className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                            sel
-                              ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300"
-                              : d.isToday
-                                ? "bg-primary-light border border-primary/30 hover:bg-blue-100"
-                                : "bg-background border border-border hover:bg-blue-50 hover:border-blue-300"
-                          }`}
-                        >
-                          {sel ? "☀️" : ""}
-                        </button>
-                      );
-                    })}
-
-                    {/* Soir row */}
-                    <span className="text-[10px] text-muted font-medium pr-1 self-center">Soir</span>
-                    {days.map((d, i) => {
-                      const sel = planningDay === i && planningMeal === "dinner";
-                      return (
-                        <button
-                          key={`d-${i}`}
-                          onClick={() => {
-                            setPlanningDay(i);
-                            setPlanningMeal("dinner");
-                            setAddedToPlanning(false);
-                          }}
-                          className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                            sel
-                              ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300"
-                              : d.isToday
-                                ? "bg-primary-light border border-primary/30 hover:bg-blue-100"
-                                : "bg-background border border-border hover:bg-blue-50 hover:border-blue-300"
-                          }`}
-                        >
-                          {sel ? "🌙" : ""}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <button
+                  key={r.id}
+                  onClick={() => {
+                    setSelectedPlat(r);
+                    setSuggestions(null);
+                  }}
+                  className="font-mono text-[11px] uppercase tracking-wider rounded-full px-3 py-1.5 transition-colors"
+                  style={{
+                    background: active ? "var(--color-ink)" : "var(--color-cream-pale)",
+                    color: active ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
+                    border: "1px solid",
+                    borderColor: active ? "var(--color-ink)" : "var(--color-line)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  {r.name}
+                </button>
               );
-            })()}
+            })}
+          {filteredRecipes.length === 0 && (
+            <p className="text-sm italic" style={{ color: "var(--color-ink-faint)" }}>
+              Aucune recette dans ton carnet.
+            </p>
+          )}
+        </div>
+      </section>
 
-            {/* Plan button */}
-            <button
-              onClick={addToPlanning}
-              disabled={addedToPlanning}
-              className={`mt-3 w-full py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                addedToPlanning
-                  ? "bg-blue-100 text-blue-600"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}
-            >
-              {addedToPlanning ? "Planifié !" : "📅 Planifier ce repas"}
-            </button>
-          </div>
-
-          {/* Add to shopping list */}
+      {/* Actions */}
+      <div className="flex flex-wrap items-center gap-3 pt-6 border-t" style={{ borderColor: "var(--color-line)" }}>
+        <button
+          onClick={getSuggestions}
+          disabled={!selectedPlat || loading}
+          className="rounded-full px-5 py-2.5 text-sm transition-colors disabled:opacity-50"
+          style={{
+            background: "var(--color-ink)",
+            color: "var(--color-cream-pale)",
+            border: "1px solid var(--color-ink)",
+          }}
+        >
+          {loading ? "Suggestion…" : "✦ Compléter avec l'IA"}
+        </button>
+        {selectedPlat && (
           <button
             onClick={addMenuToList}
-            disabled={addedToList || (!includePlat && !includeEntree && !includeDessert && !includeBoisson)}
-            className={`w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
-              addedToList
-                ? "bg-primary-light text-primary"
-                : "bg-primary text-white hover:bg-primary-hover disabled:opacity-50"
-            }`}
+            className="rounded-full px-5 py-2.5 text-sm font-medium"
+            style={{
+              background: "var(--color-terracotta)",
+              color: "var(--color-cream-pale)",
+              border: "1px solid var(--color-terracotta)",
+            }}
           >
-            {addedToList ? "Ajouté à ma liste !" : "🛒 Ajouter les ingrédients à ma liste"}
+            + Ajouter à la liste
           </button>
-        </div>
-      )}
+        )}
+        {suggestions?.boisson && (
+          <span className="text-sm" style={{ color: "var(--color-ink-mute)" }}>
+            Suggestion boisson : <em>{suggestions.boisson.name}</em>
+          </span>
+        )}
+      </div>
     </div>
   );
 }

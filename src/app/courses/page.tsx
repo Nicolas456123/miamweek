@@ -5,6 +5,13 @@ import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icons";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 import { useToast } from "@/components/toast";
+import {
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  PageHeader,
+} from "@/components/ui-kit";
 
 type ListItem = {
   id: number;
@@ -29,17 +36,13 @@ export default function CoursesPage() {
     fetch("/api/list?status=active")
       .then((r) => r.json())
       .then((data) => setItems(Array.isArray(data) ? data : []))
-      .catch(() => {
-        // Offline - keep current state
-      });
+      .catch(() => {});
   }, []);
 
   const { isOnline, queueSize, isSyncing, syncNow, safeFetch } = useOfflineSync(fetchItems);
 
   useEffect(() => {
     fetchItems();
-
-    // Auto-refresh every 5s — but only if no pending offline mutations
     const interval = setInterval(() => {
       if (navigator.onLine) safeFetch();
     }, 5000);
@@ -47,14 +50,10 @@ export default function CoursesPage() {
   }, [fetchItems, safeFetch]);
 
   const toggleItem = async (id: number, checked: boolean) => {
-    // Optimistic update - instant visual feedback always
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, checked: !checked ? 1 : 0 } : item
-      )
+      prev.map((item) => (item.id === id ? { ...item, checked: !checked ? 1 : 0 } : item))
     );
 
-    // Send to server (queued if offline)
     const res = await offlineFetch("/api/list", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -62,7 +61,6 @@ export default function CoursesPage() {
       offlineOptimistic: true,
     });
 
-    // If server returned an error while online, revert
     if (res && !res.ok && navigator.onLine) {
       fetchItems();
     }
@@ -71,7 +69,6 @@ export default function CoursesPage() {
   const addQuickItem = async () => {
     if (!quickAdd.trim()) return;
 
-    // Optimistic: add to local list immediately
     const tempId = -Date.now();
     const newItem: ListItem = {
       id: tempId,
@@ -103,7 +100,6 @@ export default function CoursesPage() {
       offlineOptimistic: true,
     });
 
-    // Refresh to get real ID (if online)
     if (navigator.onLine) {
       setTimeout(fetchItems, 300);
     }
@@ -123,8 +119,7 @@ export default function CoursesPage() {
 
     const res = await fetch("/api/list/finish", { method: "POST" });
     const data = await res.json();
-    toast(`Courses terminées ! ${data.itemsProcessed || 0} produit(s) ajouté(s) à l'inventaire.`);
-    // Redirect to inventory after a short delay
+    toast(`Courses terminées · ${data.itemsProcessed || 0} produit(s) ajouté(s) à l'inventaire.`);
     setTimeout(() => {
       window.location.href = "/inventaire";
     }, 1500);
@@ -152,205 +147,259 @@ export default function CoursesPage() {
 
   if (totalCount === 0) {
     return (
-      <div className="max-w-md mx-auto text-center py-16">
-        <div className="text-6xl mb-4">🛒</div>
-        <h1 className="text-xl font-bold mb-2">Pas de liste active</h1>
-        <p className="text-muted mb-6">
-          Prépare ta liste de courses avant de partir en magasin
-        </p>
-        <Link
-          href="/liste"
-          className="px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary-hover transition-colors"
-        >
-          Préparer ma liste
-        </Link>
+      <div className="max-w-3xl mx-auto pb-24 md:pb-8">
+        <PageHeader
+          eyebrow="en magasin"
+          title={
+            <>
+              Mode <span style={{ fontStyle: "italic", color: "var(--color-terracotta)" }}>courses</span>
+            </>
+          }
+        />
+        <EmptyState
+          title="Pas de liste active"
+          description="Prépare ta liste avant de partir en magasin — elle apparaîtra ici."
+          action={
+            <Link href="/liste">
+              <Button variant="primary" size="lg">Préparer ma liste</Button>
+            </Link>
+          }
+        />
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl mx-auto pb-20 md:pb-0">
-      {/* Offline banner */}
+    <div className="max-w-3xl mx-auto pb-24 md:pb-8">
       {(!isOnline || queueSize > 0) && (
-        <div
-          className={`mb-3 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between ${
-            !isOnline
-              ? "bg-orange-100 text-orange-800 border border-orange-200"
-              : "bg-blue-100 text-blue-800 border border-blue-200"
-          }`}
+        <Card
+          variant="default"
+          padding="sm"
+          className="mb-4 flex items-center justify-between"
+          style={{
+            background: !isOnline
+              ? "rgba(201,162,39,0.15)"
+              : "rgba(92,107,63,0.13)",
+            borderColor: !isOnline
+              ? "rgba(201,162,39,0.32)"
+              : "rgba(92,107,63,0.28)",
+          }}
         >
-          <div className="flex items-center gap-2">
-            <span>{!isOnline ? "📡" : "🔄"}</span>
+          <div
+            className="text-sm flex items-center gap-2"
+            style={{
+              color: !isOnline ? "#8a6d10" : "var(--color-olive-deep)",
+            }}
+          >
+            <span
+              className="dot"
+              style={{
+                background: !isOnline ? "var(--color-mustard)" : "var(--color-olive)",
+              }}
+            />
             {!isOnline ? (
               <span>
-                Mode hors-ligne — tes actions sont sauvegardées localement
+                Hors-ligne — actions sauvegardées localement
                 {queueSize > 0 && ` (${queueSize} en attente)`}
               </span>
             ) : (
               <span>
-                {queueSize} modification{queueSize > 1 ? "s" : ""} en attente de
-                synchronisation
+                {queueSize} modification{queueSize > 1 ? "s" : ""} en attente
               </span>
             )}
           </div>
           {isOnline && queueSize > 0 && (
-            <button
-              onClick={syncNow}
-              className="px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-semibold"
-            >
-              Sync
-            </button>
+            <Button variant="primary" size="sm" onClick={syncNow}>
+              {isSyncing ? "Sync…" : "Sync"}
+            </Button>
           )}
-        </div>
+        </Card>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">Mode courses</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={cancelShopping}
-            className="px-4 py-2 bg-card border border-border text-muted rounded-xl text-sm font-medium hover:text-danger hover:border-danger transition-colors"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={finishShopping}
-            disabled={!isOnline}
-            className="px-4 py-2 bg-success text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            Valider les courses
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="en magasin"
+        title={
+          <>
+            Mode <span style={{ fontStyle: "italic", color: "var(--color-terracotta)" }}>courses</span>
+          </>
+        }
+        actions={
+          <>
+            <Button variant="ghost" size="md" onClick={cancelShopping}>
+              Annuler
+            </Button>
+            <Button variant="ink" size="md" onClick={finishShopping} disabled={!isOnline}>
+              Valider
+            </Button>
+          </>
+        }
+      />
 
       {/* Progress */}
-      <div className="bg-card border border-border rounded-xl p-4 mb-4">
-        <div className="flex justify-between text-sm mb-2">
-          <span className="font-medium">
-            {checkedCount}/{totalCount} articles
+      <Card variant="default" padding="md" className="mb-5">
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="font-display text-3xl tnum" style={{ color: "var(--color-ink)" }}>
+            {String(checkedCount).padStart(2, "0")}
+            <span style={{ color: "var(--color-ink-faint)" }}> / {String(totalCount).padStart(2, "0")}</span>
           </span>
-          <span className="text-muted">{Math.round(progress)}%</span>
+          <span className="font-mono text-xs tnum" style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}>
+            {Math.round(progress)}%
+          </span>
         </div>
-        <div className="w-full bg-border rounded-full h-3 overflow-hidden">
+        <div
+          className="w-full h-1 rounded-full overflow-hidden"
+          style={{ background: "var(--color-line)" }}
+        >
           <div
-            className="h-full rounded-full transition-all duration-300"
+            className="h-full transition-all duration-300"
             style={{
               width: `${progress}%`,
-              backgroundColor:
-                progress === 100
-                  ? "var(--color-success)"
-                  : "var(--color-primary)",
+              background:
+                progress === 100 ? "var(--color-olive)" : "var(--color-terracotta)",
             }}
           />
         </div>
         {progress === 100 && (
-          <p className="text-sm text-success font-medium mt-2 text-center">
-            Tout est pris ! Bon appétit !
+          <p
+            className="text-sm font-medium mt-3 text-center font-display"
+            style={{ color: "var(--color-olive-deep)", fontStyle: "italic", fontSize: 18 }}
+          >
+            Tout est pris. Bon appétit.
           </p>
         )}
-      </div>
+      </Card>
 
       {/* Quick add */}
       {showQuickAdd ? (
-        <div className="bg-card border border-border rounded-xl p-3 mb-4 flex gap-2">
+        <Card variant="default" padding="sm" className="mb-4 flex gap-2">
           <input
             type="text"
             value={quickAdd}
             onChange={(e) => setQuickAdd(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addQuickItem()}
-            placeholder="Ajouter un article..."
-            className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="Ajouter un article…"
+            className="flex-1 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
             autoFocus
           />
-          <button
-            onClick={addQuickItem}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium"
-          >
+          <Button variant="primary" size="md" onClick={addQuickItem}>
             +
-          </button>
-          <button
-            onClick={() => setShowQuickAdd(false)}
-            className="px-2 text-muted"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
+          </Button>
+          <Button variant="ghost" size="md" onClick={() => setShowQuickAdd(false)}>
+            ×
+          </Button>
+        </Card>
       ) : (
         <button
           onClick={() => setShowQuickAdd(true)}
-          className="w-full mb-4 py-2.5 border border-dashed border-border rounded-xl text-muted hover:border-primary hover:text-primary text-sm transition-colors"
+          className="w-full mb-4 py-2.5 border border-dashed rounded-md text-sm transition-colors hover:border-[var(--color-terracotta)] hover:text-[var(--color-terracotta-deep)]"
+          style={{
+            borderColor: "var(--color-line)",
+            color: "var(--color-ink-mute)",
+          }}
         >
           + Ajouter en direct
         </button>
       )}
 
-      {/* Shopping list */}
-      <div className="space-y-3">
+      {/* Shopping list grouped by category */}
+      <div className="space-y-4">
         {Object.entries(grouped)
           .sort(([a], [b]) => a.localeCompare(b))
-          .map(([category, categoryItems]) => (
-            <div
-              key={category}
-              className="bg-card border border-border rounded-xl overflow-hidden"
-            >
-              <div className="px-4 py-2 bg-card-hover border-b border-border">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <CategoryIcon category={category} size={16} />
-                  {category}
-                  <span className="text-muted font-normal">
-                    {categoryItems.filter((i) => !!i.checked).length}/
-                    {categoryItems.length}
-                  </span>
-                </h3>
-              </div>
-              <div className="divide-y divide-border">
-                {categoryItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => toggleItem(item.id, !!item.checked)}
-                    className="flex items-center gap-3 px-4 py-3 w-full text-left hover:bg-card-hover transition-colors"
-                  >
-                    <div
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs transition-colors ${
-                        !!item.checked
-                          ? "bg-success border-success text-white"
-                          : "border-border hover:border-primary"
-                      }`}
+          .map(([category, categoryItems]) => {
+            const catChecked = categoryItems.filter((i) => !!i.checked).length;
+            return (
+              <Card
+                key={category}
+                variant="default"
+                padding="none"
+                className="overflow-hidden"
+              >
+                <div
+                  className="px-4 py-3 flex items-center justify-between border-b"
+                  style={{
+                    borderColor: "var(--color-line)",
+                    background: "var(--color-cream-deep)",
+                  }}
+                >
+                  <h3 className="flex items-center gap-2.5">
+                    <CategoryIcon category={category} size={14} />
+                    <span
+                      className="eyebrow"
+                      style={{ color: "var(--color-ink-soft)" }}
                     >
-                      {!!item.checked && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      )}
-                    </div>
-                    <div className={`flex-1 min-w-0 ${
-                      !!item.checked ? "line-through opacity-50" : ""
-                    }`}>
-                      <span className="text-sm block truncate">{item.product_name}</span>
-                      {item.source_recipe && (
-                        <span className="text-[10px] text-orange-500 block truncate">
-                          {item.source_recipe}
+                      {category}
+                    </span>
+                  </h3>
+                  <span
+                    className="font-mono text-xs tnum"
+                    style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
+                  >
+                    {String(catChecked).padStart(2, "0")} / {String(categoryItems.length).padStart(2, "0")}
+                  </span>
+                </div>
+                <div>
+                  {categoryItems.map((item, idx) => (
+                    <button
+                      key={item.id}
+                      onClick={() => toggleItem(item.id, !!item.checked)}
+                      className="flex items-center gap-3 px-4 py-3 w-full text-left transition-colors hover:bg-[var(--color-cream-deep)]"
+                      style={{
+                        borderTop:
+                          idx > 0 ? "1px solid var(--color-line-soft)" : "none",
+                      }}
+                    >
+                      <div
+                        className="w-5 h-5 rounded flex items-center justify-center shrink-0 transition-colors"
+                        style={{
+                          background: item.checked
+                            ? "var(--color-olive)"
+                            : "transparent",
+                          border: `1.5px solid ${
+                            item.checked ? "var(--color-olive)" : "var(--color-line)"
+                          }`,
+                          color: "var(--color-cream-pale)",
+                        }}
+                      >
+                        {!!item.checked && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </div>
+                      <div
+                        className={`flex-1 min-w-0 ${
+                          !!item.checked ? "line-through opacity-50" : ""
+                        }`}
+                      >
+                        <span className="text-sm block truncate" style={{ color: "var(--color-ink)" }}>
+                          {item.product_name}
+                        </span>
+                        {item.source_recipe && (
+                          <span
+                            className="font-mono text-[10px] block truncate"
+                            style={{ color: "var(--color-terracotta-deep)", letterSpacing: "0.04em" }}
+                          >
+                            {item.source_recipe}
+                          </span>
+                        )}
+                      </div>
+                      {item.quantity && (
+                        <span
+                          className="font-mono text-xs tnum shrink-0"
+                          style={{ color: "var(--color-ink-mute)" }}
+                        >
+                          {item.quantity} {item.unit}
                         </span>
                       )}
-                    </div>
-                    {item.quantity && (
-                      <span className="text-xs text-muted shrink-0">
-                        {item.quantity} {item.unit}
-                      </span>
-                    )}
-                    {item.source === "recipe" && !item.source_recipe && (
-                      <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded shrink-0">
-                        recette
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+                      {item.source === "recipe" && !item.source_recipe && (
+                        <Chip tone="terra">recette</Chip>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
       </div>
     </div>
   );

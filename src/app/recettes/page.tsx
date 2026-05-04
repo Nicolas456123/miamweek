@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useToast } from "@/components/toast";
 import {
   Button,
@@ -659,17 +660,14 @@ export default function RecettesPage() {
                 className="flex flex-col"
                 style={{ background: "var(--color-cream-pale)" }}
               >
-                <button
-                  onClick={() => setExpandedId(isExpanded ? null : recipe.id)}
-                  className="text-left"
-                >
+                <Link href={`/recettes/${recipe.id}`} className="block">
                   <RecipePhoto
                     recipe={recipe}
                     persist
                     placeholderTone={tone}
                     className="aspect-square w-full"
                   />
-                </button>
+                </Link>
 
                 <div className="p-4 flex-1 flex flex-col">
                   <div className="flex items-start justify-between gap-2 mb-2">

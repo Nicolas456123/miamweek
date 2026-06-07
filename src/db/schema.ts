@@ -67,6 +67,8 @@ export const products = sqliteTable("products", {
   // Conservation standard (jours)
   defaultShelfLifeDays: integer("default_shelf_life_days"), // durée typique avant péremption
   defaultShelfLifeAfterOpenDays: integer("default_shelf_life_after_open_days"), // max après ouverture
+  // Prix indicatif (€) pour la quantité par défaut
+  price: real("price"),
 });
 
 // ── Shopping list items (2-phase: prep -> active -> done) ─────────────

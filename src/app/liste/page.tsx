@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { CategoryIcon } from "@/components/category-icons";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
-import { rankedFilter, formatQuantity, estimatePrice, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
+import { rankedFilter, formatQuantity, estimatePrice, normalize, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -14,6 +14,7 @@ type Product = {
   default_unit: string;
   default_quantity: number | null;
   icon: string | null;
+  price?: number | null;
 };
 
 type ListItem = {
@@ -346,9 +347,45 @@ export default function ListePage() {
     return ordered;
   }, [visibleItems]);
 
+  // Correspondance produit (par id puis par nom) pour icône + prix
+  const productMaps = useMemo(() => {
+    const byId = new Map<number, Product>();
+    const byName = new Map<string, Product>();
+    for (const p of products) {
+      byId.set(p.id, p);
+      byName.set(normalize(p.name), p);
+    }
+    return { byId, byName };
+  }, [products]);
+
+  const productFor = useCallback(
+    (it: ListItem): Product | undefined => {
+      if (it.product_id != null && productMaps.byId.has(it.product_id)) {
+        return productMaps.byId.get(it.product_id);
+      }
+      return productMaps.byName.get(normalize(it.product_name));
+    },
+    [productMaps]
+  );
+
+  // Prix : utilise le prix de la base si dispo (proratisé à la quantité),
+  // sinon l'estimation heuristique selon l'unité.
+  const priceFor = useCallback(
+    (it: ListItem): number => {
+      const p = productFor(it);
+      if (p?.price != null) {
+        const dq = p.default_quantity || 1;
+        const ratio = it.quantity && dq ? it.quantity / dq : 1;
+        return p.price * ratio;
+      }
+      return estimatePrice(it.quantity, it.unit);
+    },
+    [productFor]
+  );
+
   // Stats
   const totalCount = items.length;
-  const totalEstimated = items.reduce((acc, it) => acc + estimatePrice(it.quantity, it.unit), 0);
+  const totalEstimated = items.reduce((acc, it) => acc + priceFor(it), 0);
   const recipeSources = useMemo(() => {
     const set = new Set<string>();
     for (const it of items) if (it.source_recipe) set.add(it.source_recipe);
@@ -678,7 +715,7 @@ export default function ListePage() {
                     color: "var(--color-ink-soft)",
                   }}
                 >
-                  <span className="truncate">{p.name}</span>
+                  <span className="truncate">{p.icon ? `${p.icon} ` : ""}{p.name}</span>
                   {freqOf(p.name) > 0 && (
                     <span className="font-mono text-[9px] tnum shrink-0" style={{ color: "var(--color-terracotta-deep)" }}>
                       ×{freqOf(p.name)}
@@ -755,7 +792,7 @@ export default function ListePage() {
                             color: "var(--color-ink-soft)",
                           }}
                         >
-                          <span className="truncate">{p.name}</span>
+                          <span className="truncate">{p.icon ? `${p.icon} ` : ""}{p.name}</span>
                           {freqOf(p.name) > 0 && (
                             <span
                               className="font-mono text-[9px] tnum shrink-0"
@@ -911,10 +948,14 @@ export default function ListePage() {
                   className="flex items-center gap-3 px-1 py-3"
                   style={{ background: "var(--color-cream)" }}
                 >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: "var(--color-line)" }}
-                  />
+                  {productFor(it)?.icon ? (
+                    <span className="text-base shrink-0 w-5 text-center">{productFor(it)!.icon}</span>
+                  ) : (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: "var(--color-line)" }}
+                    />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p
                       className="text-sm leading-tight truncate"

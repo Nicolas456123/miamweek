@@ -6,6 +6,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
+  // Lazily ensure the "unavailable" column exists so it is returned to clients
+  try { await query("ALTER TABLE list_items ADD COLUMN unavailable INTEGER DEFAULT 0"); } catch { /* already exists */ }
+
   if (status) {
     const result = await query(
       "SELECT * FROM list_items WHERE list_status = ?",
@@ -88,11 +91,14 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   const body = await request.json();
-  const { id, checked, quantity, listStatus } = body;
+  const { id, checked, quantity, listStatus, unavailable } = body;
 
   if (!id) {
     return Response.json({ error: "id is required" }, { status: 400 });
   }
+
+  // Lazily add the column if it doesn't exist yet (article indisponible en magasin)
+  try { await query("ALTER TABLE list_items ADD COLUMN unavailable INTEGER DEFAULT 0"); } catch { /* already exists */ }
 
   const setClauses: string[] = [];
   const values: (string | number | null)[] = [];
@@ -104,6 +110,10 @@ export async function PUT(request: Request) {
       setClauses.push("checked_at = ?");
       values.push(new Date().toISOString());
     }
+  }
+  if (unavailable !== undefined) {
+    setClauses.push("unavailable = ?");
+    values.push(unavailable ? 1 : 0);
   }
   if (quantity !== undefined) {
     setClauses.push("quantity = ?");

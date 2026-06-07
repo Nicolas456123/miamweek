@@ -94,6 +94,23 @@ export default function ListePage() {
   const [customCategory, setCustomCategory] = useState<string>("Autre");
   const [catalogCat, setCatalogCat] = useState<string | null>(null);
   const [orderCounts, setOrderCounts] = useState<Record<string, number>>({});
+  const [currentList, setCurrentList] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("miamweek_current_list") || "Ma liste";
+    }
+    return "Ma liste";
+  });
+  const [createdLists, setCreatedLists] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return JSON.parse(localStorage.getItem("miamweek_lists") || "[]");
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [serverListNames, setServerListNames] = useState<string[]>([]);
   const [pending, setPending] = useState<{
     productId: number | null;
     name: string;
@@ -115,11 +132,34 @@ export default function ListePage() {
   };
 
   const fetchList = useCallback(() => {
-    fetch("/api/list?status=prep")
+    fetch(`/api/list?status=prep&list=${encodeURIComponent(currentList)}`)
       .then((r) => r.json())
       .then((data) => setItems(Array.isArray(data) ? data : []))
       .catch(() => {});
-  }, []);
+  }, [currentList]);
+
+  // Persiste la liste courante et les listes créées
+  useEffect(() => {
+    localStorage.setItem("miamweek_current_list", currentList);
+  }, [currentList]);
+  useEffect(() => {
+    localStorage.setItem("miamweek_lists", JSON.stringify(createdLists));
+  }, [createdLists]);
+
+  // Toutes les listes connues (par défaut + créées + présentes en base)
+  const knownLists = useMemo(() => {
+    const set = new Set<string>(["Ma liste", ...createdLists, ...serverListNames, currentList]);
+    return [...set];
+  }, [createdLists, serverListNames, currentList]);
+
+  const createNewList = () => {
+    const name = window.prompt("Nom de la nouvelle liste ?");
+    const trimmed = name?.trim();
+    if (!trimmed) return;
+    if (!createdLists.includes(trimmed)) setCreatedLists((prev) => [...prev, trimmed]);
+    setCurrentList(trimmed);
+    setActiveCategory(null);
+  };
 
   const { safeFetch } = useOfflineSync(fetchList);
 
@@ -134,11 +174,14 @@ export default function ListePage() {
       .then((data) => {
         if (!Array.isArray(data)) return;
         const counts: Record<string, number> = {};
+        const names = new Set<string>();
         for (const it of data) {
           const k = (it.product_name || "").toLowerCase();
           if (k) counts[k] = (counts[k] || 0) + 1;
+          if (it.list_name) names.add(it.list_name);
         }
         setOrderCounts(counts);
+        setServerListNames([...names]);
       })
       .catch(() => {});
     fetchList();
@@ -189,6 +232,7 @@ export default function ListePage() {
         category: pending.category,
         source: "manual",
         listStatus: "prep",
+        listName: currentList,
       }),
       offlineOptimistic: true,
     }).then((r) => r?.json()).then((saved) => {
@@ -226,6 +270,7 @@ export default function ListePage() {
         category,
         source: "manual",
         listStatus: "prep",
+        listName: currentList,
       }),
       offlineOptimistic: true,
     }).then((r) => r?.json()).then((saved) => {
@@ -269,7 +314,11 @@ export default function ListePage() {
       toast("La liste est vide.");
       return;
     }
-    await fetch("/api/list/validate", { method: "POST" });
+    await fetch("/api/list/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listName: currentList }),
+    });
     window.location.href = "/courses";
   };
 
@@ -431,6 +480,43 @@ export default function ListePage() {
           </div>
         </div>
       </header>
+
+      {/* Sélecteur de listes */}
+      <div className="flex items-center gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
+        <span className="eyebrow mr-1 shrink-0">listes</span>
+        {knownLists.map((name) => {
+          const active = name === currentList;
+          return (
+            <button
+              key={name}
+              onClick={() => {
+                setCurrentList(name);
+                setActiveCategory(null);
+              }}
+              className="shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors whitespace-nowrap"
+              style={{
+                background: active ? "var(--color-ink)" : "var(--color-cream-pale)",
+                color: active ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
+                border: "1px solid",
+                borderColor: active ? "var(--color-ink)" : "var(--color-line)",
+              }}
+            >
+              {name}
+            </button>
+          );
+        })}
+        <button
+          onClick={createNewList}
+          className="shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors whitespace-nowrap"
+          style={{
+            background: "transparent",
+            color: "var(--color-terracotta-deep)",
+            border: "1px dashed var(--color-line)",
+          }}
+        >
+          + Nouvelle liste
+        </button>
+      </div>
 
       {/* Filter chips */}
       <div className="flex flex-wrap items-center gap-2 mb-3">

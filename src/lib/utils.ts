@@ -132,6 +132,72 @@ export function formatNumberFR(n: number): string {
   return n.toFixed(2).replace(/\.?0+$/, "").replace(".", ",");
 }
 
+// Score de pertinence d'une recherche (0 = aucune correspondance).
+// Un jeton est satisfait s'il est une sous-chaîne du NOM, ou s'il correspond à
+// un MOT ENTIER d'un champ secondaire (catégorie…). Cela évite que « mais »
+// (maïs) remonte tous les produits « Entretien & Maison ». Le nom prime.
+export function searchScore(
+  query: string,
+  name: string | null | undefined,
+  ...extra: (string | null | undefined)[]
+): number {
+  const q = normalize(query);
+  if (!q) return 1;
+  const tokens = q.split(/\s+/);
+  const nameNorm = normalize(name || "");
+  const extraWords = new Set(
+    normalize(extra.filter(Boolean).join(" "))
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+  let nameHits = 0;
+  for (const t of tokens) {
+    const inName = nameNorm.includes(t);
+    const inExtra = extraWords.has(t);
+    if (!inName && !inExtra) return 0;
+    if (inName) nameHits++;
+  }
+  let score = 1 + nameHits * 10;
+  if (nameNorm === q) score += 1000;
+  else if (nameNorm.startsWith(q)) score += 100;
+  return score;
+}
+
+// Filtre + trie une liste par pertinence (nom d'abord). Le 1er champ retourné
+// par `fields` est le nom ; les suivants sont des champs secondaires.
+export function rankedFilter<T>(
+  items: T[],
+  query: string,
+  fields: (item: T) => (string | null | undefined)[]
+): T[] {
+  if (!normalize(query)) return items;
+  return items
+    .map((item) => {
+      const f = fields(item);
+      return { item, score: searchScore(query, f[0], ...f.slice(1)) };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.item);
+}
+
+// Estimation de prix réaliste selon l'unité (faute de prix réels).
+// Évite les montants aberrants (250 g ≠ 450 €).
+export function estimatePrice(
+  qty: number | null | undefined,
+  unit: string | null | undefined
+): number {
+  const q = qty ?? 1;
+  const u = (unit || "").toLowerCase();
+  if (u === "g") return (q / 1000) * 8; // ~8 €/kg moyen
+  if (u === "kg") return q * 8;
+  if (u === "ml") return (q / 1000) * 3; // ~3 €/L moyen
+  if (u === "cl") return (q / 100) * 3;
+  if (u === "l") return q * 3;
+  // pcs, botte, sachet, pot… : ~1,8 € l'unité, borné pour rester réaliste
+  return Math.min(Math.max(q, 1), 12) * 1.8;
+}
+
 // Adapte l'unité en fonction de la grandeur : 2500 ml → « 2,5 L »,
 // 1000 g → « 1 kg », 0,5 L → « 500 ml », etc.
 export function formatQuantity(

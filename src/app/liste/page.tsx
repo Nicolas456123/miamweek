@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
-import { matchSearch, formatQuantity, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
+import { rankedFilter, formatQuantity, estimatePrice, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -273,7 +273,7 @@ export default function ListePage() {
   // Stats
   const checkedCount = items.filter((i) => !!i.checked).length;
   const totalCount = items.length;
-  const totalEstimated = items.reduce((acc, it) => acc + (it.quantity || 1) * 1.8, 0);
+  const totalEstimated = items.reduce((acc, it) => acc + estimatePrice(it.quantity, it.unit), 0);
   const recipeSources = useMemo(() => {
     const set = new Set<string>();
     for (const it of items) if (it.source_recipe) set.add(it.source_recipe);
@@ -282,9 +282,7 @@ export default function ListePage() {
 
   const filteredProducts = useMemo(() => {
     if (!productSearch) return [];
-    return products
-      .filter((p) => matchSearch(productSearch, p.name, p.category))
-      .slice(0, 12);
+    return rankedFilter(products, productSearch, (p) => [p.name, p.category]).slice(0, 12);
   }, [products, productSearch]);
 
   // Title — nN articles, un panier

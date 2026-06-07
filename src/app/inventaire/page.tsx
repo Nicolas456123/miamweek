@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/components/toast";
-import { matchSearch, formatQuantity } from "@/lib/utils";
+import { rankedFilter, formatQuantity } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -99,8 +99,34 @@ export default function InventairePage() {
   };
 
   const removeItem = async (id: number) => {
-    await fetch(`/api/pantry?id=${id}`, { method: "DELETE" });
     setItems((prev) => prev.filter((it) => it.id !== id));
+    await fetch("/api/pantry", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+  };
+
+  const updateQty = async (it: PantryItem, delta: number) => {
+    const u = (it.unit || "pcs").toLowerCase();
+    const step = u === "g" || u === "ml" ? 50 : u === "kg" || u === "l" ? 0.25 : 1;
+    const newQty = Math.round(Math.max(0, (it.quantity || 0) + step * delta) * 100) / 100;
+    if (newQty === 0) {
+      removeItem(it.id);
+      return;
+    }
+    setItems((prev) =>
+      prev.map((x) => (x.id === it.id ? { ...x, quantity: newQty } : x))
+    );
+    try {
+      await fetch("/api/pantry", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: it.id, quantity: newQty }),
+      });
+    } catch {
+      fetchPantry();
+    }
   };
 
   const groupedByLocation = useMemo(() => {
@@ -130,9 +156,7 @@ export default function InventairePage() {
 
   const filteredProducts = useMemo(() => {
     if (!addSearch) return [];
-    return products
-      .filter((p) => matchSearch(addSearch, p.name, p.category))
-      .slice(0, 12);
+    return rankedFilter(products, addSearch, (p) => [p.name, p.category]).slice(0, 12);
   }, [products, addSearch]);
 
   return (
@@ -307,7 +331,7 @@ export default function InventairePage() {
                 </p>
               ) : (
                 <ul className="px-4 space-y-px">
-                  {list.slice(0, 6).map((it) => {
+                  {list.map((it) => {
                     const days = daysUntil(it.expires_at);
                     const dlc = dlcLabel(days);
                     return (
@@ -337,8 +361,35 @@ export default function InventairePage() {
                             {it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}
                           </p>
                         </div>
+                        {/* Steppers pour ajuster le stock */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => updateQty(it, -1)}
+                            aria-label="Diminuer"
+                            className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                            style={{
+                              color: "var(--color-ink-mute)",
+                              border: "1px solid var(--color-line)",
+                              background: "var(--color-cream-pale)",
+                            }}
+                          >
+                            −
+                          </button>
+                          <button
+                            onClick={() => updateQty(it, +1)}
+                            aria-label="Augmenter"
+                            className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                            style={{
+                              color: "var(--color-ink-mute)",
+                              border: "1px solid var(--color-line)",
+                              background: "var(--color-cream-pale)",
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
                         <span
-                          className="font-mono text-xs tnum shrink-0"
+                          className="font-mono text-xs tnum shrink-0 w-8 text-right"
                           style={{
                             color:
                               dlc.tone === "danger"
@@ -359,7 +410,8 @@ export default function InventairePage() {
                         </span>
                         <button
                           onClick={() => removeItem(it.id)}
-                          className="font-mono text-[12px] opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                          aria-label="Supprimer"
+                          className="font-mono text-[12px] md:opacity-0 md:group-hover:opacity-100 transition-opacity ml-1"
                           style={{ color: "var(--color-terracotta)" }}
                         >
                           ×
@@ -367,11 +419,6 @@ export default function InventairePage() {
                       </li>
                     );
                   })}
-                  {list.length > 6 && (
-                    <li className="pt-3 px-4 text-sm" style={{ color: "var(--color-ink-faint)" }}>
-                      + {list.length - 6} autre{list.length - 6 > 1 ? "s" : ""}…
-                    </li>
-                  )}
                 </ul>
               )}
             </section>

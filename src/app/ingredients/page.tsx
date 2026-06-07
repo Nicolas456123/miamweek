@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useToast } from "@/components/toast";
 import { CategoryIcon } from "@/components/category-icons";
 import {
-  matchSearch,
+  searchScore,
   formatQuantity,
   UNITS,
   PRODUCT_CATEGORIES,
@@ -62,7 +62,7 @@ export default function IngredientsPage() {
   const visible = useMemo(() => {
     return products.filter((p) => {
       if (activeCategory && (p.category || "Autre") !== activeCategory) return false;
-      return matchSearch(search, p.name, p.category);
+      return searchScore(search, p.name, p.category) > 0;
     });
   }, [products, search, activeCategory]);
 

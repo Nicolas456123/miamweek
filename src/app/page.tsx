@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import { Logo } from "@/components/logo";
-import { getMonday } from "@/lib/utils";
+import { getMonday, estimatePrice, formatQuantity } from "@/lib/utils";
 
 const DAYS_FR_SHORT = ["L", "M", "M", "J", "V", "S", "D"];
 const DAYS_FR_3 = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"];
@@ -129,11 +129,10 @@ export default function HomePage() {
   }, [now]);
 
   const totalEstimated = useMemo(() => {
-    return listItems.reduce((acc, item) => {
-      const q = item.quantity ?? 1;
-      // No real prices — heuristic for placeholder
-      return acc + q * 1.8;
-    }, 0);
+    return listItems.reduce(
+      (acc, item) => acc + estimatePrice(item.quantity, item.unit),
+      0
+    );
   }, [listItems]);
 
   const totalIngredients = listItems.length;
@@ -307,7 +306,7 @@ export default function HomePage() {
                 <li key={it.id} className="flex justify-between gap-2">
                   <span style={{ color: "var(--color-ink-soft)" }}>· {it.product_name}</span>
                   <span className="font-mono tnum text-[12px]" style={{ color: "var(--color-ink-mute)" }}>
-                    {it.quantity ? `${it.quantity}${it.unit ? " " + it.unit : ""}` : ""}
+                    {it.quantity ? formatQuantity(it.quantity, it.unit) : ""}
                   </span>
                 </li>
               ))}

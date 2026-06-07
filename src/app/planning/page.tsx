@@ -151,6 +151,58 @@ export default function PlanningPage() {
     fetchMeals();
   };
 
+  const periodOf = (mealType: string): "lunch" | "dinner" =>
+    mealType.startsWith("lunch") ? "lunch" : "dinner";
+
+  // « Il en reste » : on garde ce plat pour plus tard. Le plat (et les plats
+  // suivants de la même période) sont décalés d'un jour, et la journée libérée
+  // est marquée « Reste ». Décalage en cascade jusqu'au premier jour libre.
+  const keepAsLeftovers = async (meal: MealEntry) => {
+    const p = periodOf(meal.meal_type);
+    const d = meal.day_of_week;
+    const periodMeals = meals.filter((m) => periodOf(m.meal_type) === p);
+    const occupied = new Set(periodMeals.map((m) => m.day_of_week));
+
+    let emptyDay = -1;
+    for (let day = d + 1; day <= 6; day++) {
+      if (!occupied.has(day)) {
+        emptyDay = day;
+        break;
+      }
+    }
+    if (emptyDay === -1) {
+      toast("Semaine pleine — libère un soir plus tard pour décaler.");
+      return;
+    }
+
+    // Décale chaque jour occupé de d à emptyDay-1 vers le jour suivant (cascade).
+    for (let day = emptyDay - 1; day >= d; day--) {
+      const dayMeals = periodMeals.filter((m) => m.day_of_week === day);
+      for (const m of dayMeals) {
+        await fetch("/api/meal-plan", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: m.id, dayOfWeek: day + 1 }),
+        });
+      }
+    }
+
+    // Marque la journée libérée comme « Reste ».
+    await fetch("/api/meal-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        weekStart: meal.week_start,
+        dayOfWeek: d,
+        mealType: p,
+        customName: "Reste",
+      }),
+    });
+
+    fetchMeals();
+    toast("Plat reporté · « Reste » aujourd'hui, plats suivants décalés.");
+  };
+
   const addWeekToList = async () => {
     const recipeMeals = meals.filter((m) => m.recipe_id);
     if (recipeMeals.length === 0) {
@@ -444,9 +496,19 @@ export default function PlanningPage() {
                     >
                       {tag}
                     </span>
+                    {(tag === "RECETTE" || tag === "MENU") && (
+                      <button
+                        onClick={() => keepAsLeftovers(meal)}
+                        className="font-mono text-[10px] md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                        style={{ color: "var(--color-ink-mute)" }}
+                        title="Il en reste : reporter ce plat à demain et décaler les suivants"
+                      >
+                        reste →
+                      </button>
+                    )}
                     <button
                       onClick={() => removeMeal(meal.id)}
-                      className="font-mono text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="font-mono text-[10px] md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                       style={{ color: "var(--color-terracotta)" }}
                     >
                       ✕

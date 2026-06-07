@@ -54,6 +54,61 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, dayOfWeek, weekStart, mealType, recipeId, customName } = body;
+
+    if (!id) {
+      return Response.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const updates: string[] = [];
+    const args: (string | number | null)[] = [];
+    if (dayOfWeek !== undefined) {
+      updates.push("day_of_week = ?");
+      args.push(dayOfWeek);
+    }
+    if (weekStart !== undefined) {
+      updates.push("week_start = ?");
+      args.push(weekStart);
+    }
+    if (mealType !== undefined) {
+      updates.push("meal_type = ?");
+      args.push(mealType);
+    }
+    if (recipeId !== undefined) {
+      updates.push("recipe_id = ?");
+      args.push(recipeId);
+    }
+    if (customName !== undefined) {
+      updates.push("custom_name = ?");
+      args.push(customName);
+    }
+
+    if (updates.length === 0) {
+      return Response.json({ error: "Nothing to update" }, { status: 400 });
+    }
+
+    args.push(id);
+    const result = await query(
+      `UPDATE meal_plan SET ${updates.join(", ")} WHERE id = ? RETURNING *`,
+      args
+    );
+
+    if (result.rows.length === 0) {
+      return Response.json({ error: "Meal not found" }, { status: 404 });
+    }
+
+    return Response.json(result.rows[0]);
+  } catch (error) {
+    return Response.json(
+      { error: "Failed to update meal" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     const id = request.nextUrl.searchParams.get("id");

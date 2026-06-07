@@ -89,9 +89,7 @@ const desktopLinks = [
   { href: "/menu", label: "Menu" },
   { href: "/recettes", label: "Recettes" },
   { href: "/liste", label: "Liste" },
-  { href: "/courses", label: "Courses" },
-  { href: "/ingredients", label: "Ingrédients" },
-  { href: "/inventaire", label: "Inventaire" },
+  { href: "/inventaire", label: "Stock" },
   { href: "/suivi", label: "Suivi" },
 ];
 
@@ -101,7 +99,6 @@ const mobileLinks = [
   { href: "/menu", label: "Menu" },
   { href: "/recettes", label: "Recettes" },
   { href: "/liste", label: "Liste" },
-  { href: "/courses", label: "Courses" },
   { href: "/inventaire", label: "Stock" },
 ];
 

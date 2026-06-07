@@ -7,7 +7,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { getMonday, DAYS, MEAL_SLOTS, matchSearch } from "@/lib/utils";
+import { getMonday, DAYS, MEAL_SLOTS, matchSearch, normalize } from "@/lib/utils";
+import { effectiveExpiry, daysUntil, type ExpiryItem } from "@/lib/expiry";
 import { useToast } from "@/components/toast";
 import { ExpiryAlert } from "@/components/expiry-alert";
 
@@ -18,6 +19,7 @@ type Recipe = {
   prep_time: number | null;
   cook_time: number | null;
   servings: number;
+  ingredients?: { name: string }[];
 };
 
 type MealEntry = {
@@ -58,6 +60,7 @@ export default function PlanningPage() {
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [preferences, setPreferences] = useState<{ product_name: string; status: string }[]>([]);
+  const [expiringNames, setExpiringNames] = useState<string[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [addingSlot, setAddingSlot] = useState<{ day: number; type: string; weekStart: string } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState("");
@@ -125,7 +128,35 @@ export default function PlanningPage() {
       .then((r) => r.json())
       .then((d) => setPreferences(Array.isArray(d) ? d : []))
       .catch(() => {});
+    // Ingrédients du stock qui périment vite (≤ 3 j) → avertissement « à cuisiner ».
+    fetch("/api/pantry")
+      .then((r) => r.json())
+      .then((data: ExpiryItem[]) => {
+        if (!Array.isArray(data)) return;
+        const names = data
+          .filter((it) => {
+            const dd = daysUntil(effectiveExpiry(it));
+            return dd !== null && dd <= 3;
+          })
+          .map((it) => normalize(it.product_name))
+          .filter(Boolean);
+        setExpiringNames([...new Set(names)]);
+      })
+      .catch(() => {});
   }, []);
+
+  // Liste des ingrédients périssables qu'un plat planifié utilise (pour alerte).
+  const mealExpiringIngredients = (meal: MealEntry): string[] => {
+    if (!meal.recipe_id || expiringNames.length === 0) return [];
+    const recipe = recipesById[meal.recipe_id];
+    if (!recipe?.ingredients) return [];
+    const hits: string[] = [];
+    for (const ing of recipe.ingredients) {
+      const n = normalize(ing.name);
+      if (n && expiringNames.some((e) => e.includes(n) || n.includes(e))) hits.push(ing.name);
+    }
+    return hits;
+  };
 
   const addMeal = async (
     dayOfWeek: number,
@@ -159,10 +190,10 @@ export default function PlanningPage() {
   const periodOf = (mealType: string): "lunch" | "dinner" =>
     mealType.startsWith("lunch") ? "lunch" : "dinner";
 
-  // « Il en reste » : on garde ce plat pour plus tard. Le plat (et les plats
-  // suivants de la même période) sont décalés d'un jour, et la journée libérée
-  // est marquée « Reste ». Décalage en cascade jusqu'au premier jour libre.
-  const keepAsLeftovers = async (meal: MealEntry) => {
+  // « Il en reste » ou « Je mange dehors » : on garde ce plat pour plus tard.
+  // Le plat (et les plats suivants de la même période) sont décalés d'un jour,
+  // et la journée libérée est marquée selon le motif. Cascade jusqu'au 1er jour libre.
+  const deferMeal = async (meal: MealEntry, marker: "Reste" | "Dehors") => {
     const p = periodOf(meal.meal_type);
     const d = meal.day_of_week;
     const periodMeals = meals.filter((m) => periodOf(m.meal_type) === p);
@@ -192,7 +223,7 @@ export default function PlanningPage() {
       }
     }
 
-    // Marque la journée libérée comme « Reste ».
+    // Marque la journée libérée selon le motif.
     await fetch("/api/meal-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -200,13 +231,20 @@ export default function PlanningPage() {
         weekStart: meal.week_start,
         dayOfWeek: d,
         mealType: p,
-        customName: "Reste",
+        customName: marker,
       }),
     });
 
     fetchMeals();
-    toast("Plat reporté · « Reste » aujourd'hui, plats suivants décalés.");
+    toast(
+      marker === "Dehors"
+        ? "Repas dehors · plat reporté, plats suivants décalés."
+        : "Plat reporté · « Reste » aujourd'hui, plats suivants décalés."
+    );
   };
+
+  const keepAsLeftovers = (meal: MealEntry) => deferMeal(meal, "Reste");
+  const eatOut = (meal: MealEntry) => deferMeal(meal, "Dehors");
 
   const addWeekToList = async () => {
     const recipeMeals = meals.filter((m) => m.recipe_id);
@@ -508,9 +546,18 @@ export default function PlanningPage() {
             {periodMeals.map((meal) => {
               const recipe = meal.recipe_id ? recipesById[meal.recipe_id] : undefined;
               const tag = detectChipType(meal, recipe);
+              const expiringIng = mealExpiringIngredients(meal);
               return (
                 <div key={meal.id} className="group">
                   <p className="text-sm leading-tight" style={{ color: "var(--color-ink)" }}>
+                    {expiringIng.length > 0 && (
+                      <span
+                        title={`À cuisiner vite — ingrédient(s) bientôt périmé(s) : ${expiringIng.join(", ")}`}
+                        style={{ marginRight: 4 }}
+                      >
+                        ⚠️
+                      </span>
+                    )}
                     {getRecipeName(meal)}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -532,6 +579,16 @@ export default function PlanningPage() {
                         title="Il en reste : reporter ce plat à demain et décaler les suivants"
                       >
                         reste →
+                      </button>
+                    )}
+                    {(tag === "RECETTE" || tag === "MENU") && (
+                      <button
+                        onClick={() => eatOut(meal)}
+                        className="font-mono text-[10px] md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                        style={{ color: "var(--color-olive-deep)" }}
+                        title="Je mange dehors (resto) : reporter ce plat et décaler les suivants"
+                      >
+                        resto →
                       </button>
                     )}
                     <button

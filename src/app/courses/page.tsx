@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icons";
 import { ItemRow, ItemIcon } from "@/components/item-row";
+import { cacheGet, cacheSet } from "@/lib/client-cache";
 import { formatQuantity, estimatePrice, normalize } from "@/lib/utils";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 import { useToast } from "@/components/toast";
@@ -30,22 +31,34 @@ type ListItem = {
 
 export default function CoursesPage() {
   const { toast } = useToast();
-  const [items, setItems] = useState<ListItem[]>([]);
-  const [products, setProducts] = useState<{ id: number; name: string; icon: string | null }[]>([]);
+  const [items, setItems] = useState<ListItem[]>(() => cacheGet<ListItem[]>("list:active") ?? []);
+  const [products, setProducts] = useState<{ id: number; name: string; icon: string | null }[]>(
+    () => cacheGet<{ id: number; name: string; icon: string | null }[]>("products") ?? []
+  );
   const [quickAdd, setQuickAdd] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   const fetchItems = useCallback(() => {
     fetch("/api/list?status=active")
       .then((r) => r.json())
-      .then((data) => setItems(Array.isArray(data) ? data : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setItems(data);
+          cacheSet("list:active", data);
+        }
+      })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     fetch("/api/products")
       .then((r) => r.json())
-      .then((d) => setProducts(Array.isArray(d) ? d : []))
+      .then((d) => {
+        if (Array.isArray(d)) {
+          setProducts(d);
+          cacheSet("products", d);
+        }
+      })
       .catch(() => {});
   }, []);
 

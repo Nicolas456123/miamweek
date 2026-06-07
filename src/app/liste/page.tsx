@@ -6,6 +6,7 @@ import { useToast } from "@/components/toast";
 import { CategoryIcon } from "@/components/category-icons";
 import { ItemRow, ItemIcon } from "@/components/item-row";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
+import { cacheGet, cacheSet } from "@/lib/client-cache";
 import { rankedFilter, formatQuantity, estimatePrice, normalize, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
@@ -197,7 +198,7 @@ function SwipeRow({ onRemove, children }: { onRemove: () => void; children: Reac
 
 export default function ListePage() {
   const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => cacheGet<Product[]>("products") ?? []);
   const [items, setItems] = useState<ListItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -313,7 +314,12 @@ export default function ListePage() {
   useEffect(() => {
     fetch("/api/products")
       .then((r) => r.json())
-      .then((d) => setProducts(Array.isArray(d) ? d : []))
+      .then((d) => {
+        if (Array.isArray(d)) {
+          setProducts(d);
+          cacheSet("products", d);
+        }
+      })
       .catch(console.error);
     // Fréquence de commande : combien de fois chaque produit a été ajouté
     fetch("/api/list")

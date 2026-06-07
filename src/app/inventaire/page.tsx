@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { ItemRow, ItemIcon } from "@/components/item-row";
+import { cacheGet, cacheSet } from "@/lib/client-cache";
 import { rankedFilter, formatQuantity, normalize, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
@@ -97,8 +98,8 @@ function dlcLabel(days: number | null): { text: string; tone: "danger" | "warn" 
 
 export default function InventairePage() {
   const { toast } = useToast();
-  const [items, setItems] = useState<PantryItem[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [items, setItems] = useState<PantryItem[]>(() => cacheGet<PantryItem[]>("pantry") ?? []);
+  const [products, setProducts] = useState<Product[]>(() => cacheGet<Product[]>("products") ?? []);
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [activeLocation, setActiveLocation] = useState<LocationKey>("frigo");
@@ -108,7 +109,12 @@ export default function InventairePage() {
   const fetchPantry = () => {
     fetch("/api/pantry")
       .then((r) => r.json())
-      .then((data) => setItems(Array.isArray(data) ? data : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setItems(data);
+          cacheSet("pantry", data);
+        }
+      })
       .catch(() => {});
   };
 
@@ -116,7 +122,12 @@ export default function InventairePage() {
     fetchPantry();
     fetch("/api/products")
       .then((r) => r.json())
-      .then((d) => setProducts(Array.isArray(d) ? d : []))
+      .then((d) => {
+        if (Array.isArray(d)) {
+          setProducts(d);
+          cacheSet("products", d);
+        }
+      })
       .catch(() => {});
   }, []);
 

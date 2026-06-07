@@ -11,6 +11,7 @@ import { getMonday, DAYS, MEAL_SLOTS, matchSearch, normalize } from "@/lib/utils
 import { effectiveExpiry, daysUntil, type ExpiryItem } from "@/lib/expiry";
 import { useToast } from "@/components/toast";
 import { ExpiryAlert } from "@/components/expiry-alert";
+import { cacheGet, cacheSet } from "@/lib/client-cache";
 
 type Recipe = {
   id: number;
@@ -58,7 +59,7 @@ const CHIP_TONES: Record<ChipType, { bg: string; fg: string }> = {
 export default function PlanningPage() {
   const { toast } = useToast();
   const [meals, setMeals] = useState<MealEntry[]>([]);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>(() => cacheGet<Recipe[]>("recipes") ?? []);
   const [preferences, setPreferences] = useState<{ product_name: string; status: string }[]>([]);
   const [expiringNames, setExpiringNames] = useState<string[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -122,7 +123,12 @@ export default function PlanningPage() {
   useEffect(() => {
     fetch("/api/recipes")
       .then((r) => r.json())
-      .then((d) => setRecipes(Array.isArray(d) ? d : []))
+      .then((d) => {
+        if (Array.isArray(d)) {
+          setRecipes(d);
+          cacheSet("recipes", d);
+        }
+      })
       .catch(console.error);
     fetch("/api/preferences")
       .then((r) => r.json())

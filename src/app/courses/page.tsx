@@ -22,6 +22,7 @@ type ListItem = {
   unit: string | null;
   category: string | null;
   checked: boolean | number;
+  unavailable?: boolean | number;
   source: string;
   list_status: string;
   source_recipe: string | null;
@@ -51,14 +52,40 @@ export default function CoursesPage() {
   }, [fetchItems, safeFetch]);
 
   const toggleItem = async (id: number, checked: boolean) => {
+    // Cocher « pris » lève automatiquement le statut indisponible
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, checked: !checked ? 1 : 0 } : item))
+      prev.map((item) =>
+        item.id === id ? { ...item, checked: !checked ? 1 : 0, unavailable: 0 } : item
+      )
     );
 
     const res = await offlineFetch("/api/list", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, checked: !checked }),
+      body: JSON.stringify({ id, checked: !checked, unavailable: false }),
+      offlineOptimistic: true,
+    });
+
+    if (res && !res.ok && navigator.onLine) {
+      fetchItems();
+    }
+  };
+
+  const toggleUnavailable = async (id: number, unavailable: boolean) => {
+    const next = !unavailable;
+    // Marquer indisponible décoche « pris »
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, unavailable: next ? 1 : 0, checked: next ? 0 : item.checked }
+          : item
+      )
+    );
+
+    const res = await offlineFetch("/api/list", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, unavailable: next, ...(next ? { checked: false } : {}) }),
       offlineOptimistic: true,
     });
 
@@ -143,8 +170,11 @@ export default function CoursesPage() {
   }, [items]);
 
   const checkedCount = items.filter((i) => !!i.checked).length;
+  const unavailableCount = items.filter((i) => !!i.unavailable).length;
   const totalCount = items.length;
-  const progress = totalCount > 0 ? (checkedCount / totalCount) * 100 : 0;
+  // « Réglé » = pris OU marqué indisponible → barre de progression complète
+  const resolvedCount = items.filter((i) => !!i.checked || !!i.unavailable).length;
+  const progress = totalCount > 0 ? (resolvedCount / totalCount) * 100 : 0;
   const totalEstimated = useMemo(
     () => items.reduce((acc, it) => acc + estimatePrice(it.quantity, it.unit), 0),
     [items]
@@ -267,6 +297,7 @@ export default function CoursesPage() {
               style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
             >
               {takenEstimated > 0 ? `${fmtEUR(takenEstimated)} pris · ` : ""}
+              {unavailableCount > 0 ? `${unavailableCount} indispo · ` : ""}
               {Math.round(progress)}%
             </span>
           </div>
@@ -295,7 +326,7 @@ export default function CoursesPage() {
             className="text-sm font-medium mt-3 text-center font-display"
             style={{ color: "var(--color-olive-deep)", fontStyle: "italic", fontSize: 18 }}
           >
-            Tout est pris. Bon appétit.
+            {unavailableCount > 0 ? "Tout est réglé." : "Tout est pris. Bon appétit."}
           </p>
         )}
       </Card>
@@ -369,64 +400,98 @@ export default function CoursesPage() {
                   </span>
                 </div>
                 <div>
-                  {categoryItems.map((item, idx) => (
-                    <button
-                      key={item.id}
-                      onClick={() => toggleItem(item.id, !!item.checked)}
-                      className="flex items-center gap-3 px-4 py-3 w-full text-left transition-colors hover:bg-[var(--color-cream-deep)]"
-                      style={{
-                        borderTop:
-                          idx > 0 ? "1px solid var(--color-line-soft)" : "none",
-                      }}
-                    >
+                  {categoryItems.map((item, idx) => {
+                    const isUnavailable = !!item.unavailable;
+                    return (
                       <div
-                        className="w-5 h-5 rounded flex items-center justify-center shrink-0 transition-colors"
+                        key={item.id}
+                        className="flex items-center gap-2 px-4 py-3 transition-colors"
                         style={{
-                          background: item.checked
-                            ? "var(--color-olive)"
-                            : "transparent",
-                          border: `1.5px solid ${
-                            item.checked ? "var(--color-olive)" : "var(--color-line)"
-                          }`,
-                          color: "var(--color-cream-pale)",
+                          borderTop: idx > 0 ? "1px solid var(--color-line-soft)" : "none",
+                          background: isUnavailable ? "rgba(201,162,39,0.08)" : "transparent",
                         }}
                       >
-                        {!!item.checked && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </div>
-                      <div
-                        className={`flex-1 min-w-0 ${
-                          !!item.checked ? "line-through opacity-50" : ""
-                        }`}
-                      >
-                        <span className="text-sm block truncate" style={{ color: "var(--color-ink)" }}>
-                          {item.product_name}
-                        </span>
-                        {item.source_recipe && (
-                          <span
-                            className="font-mono text-[10px] block truncate"
-                            style={{ color: "var(--color-terracotta-deep)", letterSpacing: "0.04em" }}
-                          >
-                            {item.source_recipe}
-                          </span>
-                        )}
-                      </div>
-                      {item.quantity && (
-                        <span
-                          className="font-mono text-xs tnum shrink-0"
-                          style={{ color: "var(--color-ink-mute)" }}
+                        {/* Zone principale : cocher « pris » */}
+                        <button
+                          onClick={() => toggleItem(item.id, !!item.checked)}
+                          disabled={isUnavailable}
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left transition-colors disabled:cursor-not-allowed"
                         >
-                          {formatQuantity(item.quantity, item.unit)}
-                        </span>
-                      )}
-                      {item.source === "recipe" && !item.source_recipe && (
-                        <Chip tone="terra">recette</Chip>
-                      )}
-                    </button>
-                  ))}
+                          <div
+                            className="w-5 h-5 rounded flex items-center justify-center shrink-0 transition-colors"
+                            style={{
+                              background: item.checked ? "var(--color-olive)" : "transparent",
+                              border: `1.5px solid ${
+                                item.checked ? "var(--color-olive)" : "var(--color-line)"
+                              }`,
+                              color: "var(--color-cream-pale)",
+                              opacity: isUnavailable ? 0.4 : 1,
+                            }}
+                          >
+                            {!!item.checked && (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <div
+                            className={`flex-1 min-w-0 ${
+                              !!item.checked || isUnavailable ? "line-through opacity-50" : ""
+                            }`}
+                          >
+                            <span className="text-sm block truncate" style={{ color: "var(--color-ink)" }}>
+                              {item.product_name}
+                            </span>
+                            {isUnavailable ? (
+                              <span
+                                className="font-mono text-[10px] block truncate"
+                                style={{ color: "#8a6d10", letterSpacing: "0.04em" }}
+                              >
+                                indisponible en magasin
+                              </span>
+                            ) : (
+                              item.source_recipe && (
+                                <span
+                                  className="font-mono text-[10px] block truncate"
+                                  style={{ color: "var(--color-terracotta-deep)", letterSpacing: "0.04em" }}
+                                >
+                                  {item.source_recipe}
+                                </span>
+                              )
+                            )}
+                          </div>
+                          {item.quantity && (
+                            <span
+                              className="font-mono text-xs tnum shrink-0"
+                              style={{ color: "var(--color-ink-mute)" }}
+                            >
+                              {formatQuantity(item.quantity, item.unit)}
+                            </span>
+                          )}
+                          {item.source === "recipe" && !item.source_recipe && !isUnavailable && (
+                            <Chip tone="terra">recette</Chip>
+                          )}
+                        </button>
+
+                        {/* Bouton « indisponible » */}
+                        <button
+                          onClick={() => toggleUnavailable(item.id, isUnavailable)}
+                          title={isUnavailable ? "Disponible" : "Marquer indisponible"}
+                          aria-label={isUnavailable ? "Marquer disponible" : "Marquer indisponible"}
+                          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                          style={{
+                            background: isUnavailable ? "var(--color-mustard)" : "transparent",
+                            border: `1.5px solid ${isUnavailable ? "var(--color-mustard)" : "var(--color-line)"}`,
+                            color: isUnavailable ? "var(--color-cream-pale)" : "var(--color-ink-mute)",
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
             );

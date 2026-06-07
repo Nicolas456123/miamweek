@@ -78,6 +78,7 @@ export const listItems = sqliteTable("list_items", {
   unit: text("unit"),
   category: text("category"),
   checked: integer("checked", { mode: "boolean" }).default(false),
+  unavailable: integer("unavailable", { mode: "boolean" }).default(false), // indisponible en magasin
   source: text("source").default("manual"), // "manual" | "auto" | "recipe"
   listStatus: text("list_status").default("prep"), // "prep" | "active" | "done"
   addedAt: text("added_at").default("CURRENT_TIMESTAMP"),

@@ -461,7 +461,7 @@ export default function ListePage() {
             <button
               key={cat}
               onClick={() => setActiveCategory(active ? null : cat)}
-              className="font-mono text-[11px] uppercase tracking-wider rounded-full px-3 py-1 transition-colors"
+              className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider rounded-full px-3 py-1 transition-colors"
               style={{
                 background: active ? "var(--color-terracotta)" : "var(--color-cream-pale)",
                 color: active ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
@@ -470,6 +470,7 @@ export default function ListePage() {
                 letterSpacing: "0.06em",
               }}
             >
+              <CategoryIcon category={cat} size={13} />
               {short} · {String(categoryCounts[cat]).padStart(2, "0")}
             </button>
           );
@@ -800,6 +801,9 @@ export default function ListePage() {
                 style={{ color: "var(--color-ink-faint)", letterSpacing: "0.08em" }}
               >
                 {String(idx + 1).padStart(2, "0")}
+              </span>
+              <span className="self-center">
+                <CategoryIcon category={cat} size={20} />
               </span>
               <h2
                 className="font-display tracking-tight"

@@ -57,6 +57,7 @@ export default function PlanningPage() {
   const { toast } = useToast();
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [preferences, setPreferences] = useState<{ product_name: string; status: string }[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [addingSlot, setAddingSlot] = useState<{ day: number; type: string; weekStart: string } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState("");
@@ -120,6 +121,10 @@ export default function PlanningPage() {
       .then((r) => r.json())
       .then((d) => setRecipes(Array.isArray(d) ? d : []))
       .catch(console.error);
+    fetch("/api/preferences")
+      .then((r) => r.json())
+      .then((d) => setPreferences(Array.isArray(d) ? d : []))
+      .catch(() => {});
   }, []);
 
   const addMeal = async (
@@ -260,11 +265,23 @@ export default function PlanningPage() {
         return `${name}: Midi=${lc.mode === "skip" ? "skip" : `cook ${lc.persons}p`}, Soir=${dc.mode === "skip" ? "skip" : `cook ${dc.persons}p`}`;
       }).join("\n");
       const recipeNames = recipes.map((r) => `${r.name} (${r.category || "?"}, ${r.servings}p)`).join(", ");
+      const avoid = preferences
+        .filter((p) => p.status === "allergy" || p.status === "dislike")
+        .map((p) => p.product_name);
+      const love = preferences.filter((p) => p.status === "love").map((p) => p.product_name);
+      const prefLines = [
+        avoid.length ? `À ÉVITER absolument (allergies / n'aime pas) : ${avoid.join(", ")}` : "",
+        love.length ? `À privilégier (adore) : ${love.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
       const res = await fetch("/api/ai/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: `Complète ce planning. Contexte:\n${dayDescriptions}\nRecettes: ${recipeNames}\nRéponds JSON [{"dayOfWeek":0,"mealType":"dinner","name":"X"}]`,
+          prompt: `Complète ce planning. Contexte:\n${dayDescriptions}\nRecettes: ${recipeNames}${
+            prefLines ? `\n${prefLines}` : ""
+          }\nRéponds JSON [{"dayOfWeek":0,"mealType":"dinner","name":"X"}]`,
         }),
       });
       const data = await res.json();

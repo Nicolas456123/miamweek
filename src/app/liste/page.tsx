@@ -213,16 +213,7 @@ export default function ListePage() {
     }
     return "Ma liste";
   });
-  const [createdLists, setCreatedLists] = useState<string[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        return JSON.parse(localStorage.getItem("miamweek_lists") || "[]");
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
+  const [serverLists, setServerLists] = useState<string[]>([]);
   const [serverListNames, setServerListNames] = useState<string[]>([]);
   const [pending, setPending] = useState<{
     productId: number | null;
@@ -257,27 +248,63 @@ export default function ListePage() {
       .catch(() => {});
   }, [currentList]);
 
-  // Persiste la liste courante et les listes créées
+  // La liste courante (sélection) reste un choix par appareil.
   useEffect(() => {
     localStorage.setItem("miamweek_current_list", currentList);
   }, [currentList]);
+
+  const fetchLists = useCallback(() => {
+    fetch("/api/lists")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setServerLists(d.map((l: { name: string }) => l.name));
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
-    localStorage.setItem("miamweek_lists", JSON.stringify(createdLists));
-  }, [createdLists]);
+    fetchLists();
+  }, [fetchLists]);
 
-  // Toutes les listes connues (par défaut + créées + présentes en base)
+  // Toutes les listes connues (en base + présentes via les articles)
   const knownLists = useMemo(() => {
-    const set = new Set<string>(["Ma liste", ...createdLists, ...serverListNames, currentList]);
+    const set = new Set<string>(["Ma liste", ...serverLists, ...serverListNames, currentList]);
     return [...set];
-  }, [createdLists, serverListNames, currentList]);
+  }, [serverLists, serverListNames, currentList]);
 
-  const createNewList = () => {
+  const createNewList = async () => {
     const name = window.prompt("Nom de la nouvelle liste ?");
     const trimmed = name?.trim();
     if (!trimmed) return;
-    if (!createdLists.includes(trimmed)) setCreatedLists((prev) => [...prev, trimmed]);
+    setServerLists((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
     setCurrentList(trimmed);
     setActiveCategory(null);
+    try {
+      await fetch("/api/lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+    } catch {
+      /* sera retenté au prochain chargement */
+    }
+  };
+
+  const deleteCurrentList = async () => {
+    if (currentList === "Ma liste") return;
+    if (!confirm(`Supprimer la liste « ${currentList} » et ses articles ?`)) return;
+    const name = currentList;
+    setServerLists((prev) => prev.filter((n) => n !== name));
+    setCurrentList("Ma liste");
+    try {
+      await fetch("/api/lists", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+    } catch {
+      /* ignore */
+    }
   };
 
   const { safeFetch } = useOfflineSync(fetchList);
@@ -699,6 +726,20 @@ export default function ListePage() {
         >
           + Nouvelle liste
         </button>
+        {currentList !== "Ma liste" && (
+          <button
+            onClick={deleteCurrentList}
+            aria-label="Supprimer cette liste"
+            title="Supprimer cette liste"
+            className="shrink-0 rounded-full w-8 h-8 flex items-center justify-center transition-colors"
+            style={{ color: "var(--color-terracotta)", border: "1px solid var(--color-line)" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Filter chips */}

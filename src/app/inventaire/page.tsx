@@ -65,6 +65,8 @@ export default function InventairePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [activeLocation, setActiveLocation] = useState<LocationKey>("frigo");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   const fetchPantry = () => {
     fetch("/api/pantry")
@@ -115,6 +117,35 @@ export default function InventairePage() {
       removeItem(it.id);
       return;
     }
+    setItems((prev) =>
+      prev.map((x) => (x.id === it.id ? { ...x, quantity: newQty } : x))
+    );
+    try {
+      await fetch("/api/pantry", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: it.id, quantity: newQty }),
+      });
+    } catch {
+      fetchPantry();
+    }
+  };
+
+  const startEditQty = (it: PantryItem) => {
+    setEditingId(it.id);
+    setEditValue(it.quantity != null ? String(it.quantity) : "");
+  };
+
+  const saveQty = async (it: PantryItem) => {
+    const raw = editValue.replace(",", ".").trim();
+    setEditingId(null);
+    if (raw === "" || isNaN(Number(raw))) return;
+    const newQty = Math.max(0, Number(raw));
+    if (newQty === 0) {
+      removeItem(it.id);
+      return;
+    }
+    if (newQty === it.quantity) return;
     setItems((prev) =>
       prev.map((x) => (x.id === it.id ? { ...x, quantity: newQty } : x))
     );
@@ -354,12 +385,35 @@ export default function InventairePage() {
                           <p className="text-sm leading-tight truncate" style={{ color: "var(--color-ink)" }}>
                             {it.product_name}
                           </p>
-                          <p
-                            className="font-mono text-[10px] truncate"
-                            style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
-                          >
-                            {it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}
-                          </p>
+                          {editingId === it.id ? (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                value={editValue}
+                                autoFocus
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onBlur={() => saveQty(it)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveQty(it);
+                                  if (e.key === "Escape") setEditingId(null);
+                                }}
+                                className="w-16 bg-[var(--color-cream-pale)] border border-[var(--color-terracotta)] rounded px-1.5 py-0.5 text-xs tnum focus:outline-none"
+                              />
+                              <span className="font-mono text-[10px]" style={{ color: "var(--color-ink-mute)" }}>
+                                {it.unit}
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => startEditQty(it)}
+                              title="Modifier la quantité"
+                              className="font-mono text-[10px] truncate text-left hover:underline"
+                              style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
+                            >
+                              {it.quantity ? formatQuantity(it.quantity, it.unit) : "— (modifier)"}
+                            </button>
+                          )}
                         </div>
                         {/* Steppers pour ajuster le stock */}
                         <div className="flex items-center gap-1 shrink-0">

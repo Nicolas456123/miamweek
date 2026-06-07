@@ -34,6 +34,7 @@ type ListItem = {
   unit: string | null;
   category: string | null;
   source_recipe?: string | null;
+  checked?: boolean | number;
 };
 
 const PLACEHOLDER_TONES = ["terra", "olive", "mustard", "neutral"] as const;
@@ -43,6 +44,7 @@ export default function HomePage() {
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [recipes, setRecipes] = useState<Record<number, Recipe>>({});
   const [listItems, setListItems] = useState<ListItem[]>([]);
+  const [activeItems, setActiveItems] = useState<ListItem[]>([]);
 
   useEffect(() => {
     const today = new Date();
@@ -68,6 +70,12 @@ export default function HomePage() {
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setListItems(data);
+      })
+      .catch(() => {});
+    fetch("/api/list?status=active")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setActiveItems(data);
       })
       .catch(() => {});
   }, []);
@@ -134,6 +142,20 @@ export default function HomePage() {
       0
     );
   }, [listItems]);
+
+  const activeCount = activeItems.length;
+  const activeChecked = useMemo(
+    () => activeItems.filter((i) => !!i.checked).length,
+    [activeItems]
+  );
+  const activeEstimated = useMemo(
+    () =>
+      activeItems.reduce(
+        (acc, item) => acc + estimatePrice(item.quantity, item.unit),
+        0
+      ),
+    [activeItems]
+  );
 
   const totalIngredients = listItems.length;
   const totalRecipesPlanned = useMemo(
@@ -333,6 +355,39 @@ export default function HomePage() {
               Mode courses →
             </Link>
           </div>
+
+          {/* Liste validée — en cours en magasin */}
+          {activeCount > 0 && (
+            <Link
+              href="/courses"
+              className="block mt-3 rounded-md p-4 transition-colors"
+              style={{
+                background: "var(--color-cream-pale)",
+                border: "1px solid var(--color-olive)",
+              }}
+            >
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="eyebrow" style={{ color: "var(--color-olive-deep)" }}>
+                  liste validée · en cours
+                </span>
+                <span
+                  className="font-display tnum text-base"
+                  style={{ color: "var(--color-terracotta)", fontStyle: "italic" }}
+                >
+                  ~{activeEstimated.toFixed(2)}€
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="font-display text-2xl tnum leading-none" style={{ color: "var(--color-ink)" }}>
+                  {String(activeChecked).padStart(2, "0")}
+                  <span style={{ color: "var(--color-ink-faint)" }}> / {String(activeCount).padStart(2, "0")}</span>
+                </span>
+                <span className="eyebrow" style={{ color: "var(--color-ink-mute)" }}>
+                  pris en magasin →
+                </span>
+              </div>
+            </Link>
+          )}
         </section>
 
         {/* 03 — SUGGESTION */}

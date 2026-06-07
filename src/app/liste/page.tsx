@@ -82,6 +82,61 @@ function numeralFR(n: number): string {
   return String(n);
 }
 
+// Bouton qui répète l'action tant qu'il est maintenu (en accélérant).
+function HoldButton({
+  onStep,
+  ariaLabel,
+  className,
+  style,
+  children,
+}: {
+  onStep: () => void;
+  ariaLabel: string;
+  className?: string;
+  style?: React.CSSProperties;
+  children: ReactNode;
+}) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const delay = useRef(280);
+
+  const stop = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+  const start = () => {
+    stop();
+    onStep();
+    delay.current = 280;
+    const tick = () => {
+      onStep();
+      delay.current = Math.max(45, delay.current * 0.8);
+      timer.current = setTimeout(tick, delay.current);
+    };
+    timer.current = setTimeout(tick, delay.current);
+  };
+
+  useEffect(() => () => stop(), []);
+
+  return (
+    <button
+      onPointerDown={(e) => {
+        e.preventDefault();
+        start();
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      aria-label={ariaLabel}
+      className={className}
+      style={style}
+    >
+      {children}
+    </button>
+  );
+}
+
 // Ligne avec glisser-pour-supprimer (vers la gauche) sur mobile.
 function SwipeRow({ onRemove, children }: { onRemove: () => void; children: ReactNode }) {
   const [dx, setDx] = useState(0);
@@ -178,6 +233,12 @@ export default function ListePage() {
   } | null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const nextTempIdRef = useRef(-1);
+  const itemsRef = useRef<ListItem[]>([]);
+  const syncTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   useEffect(() => {
     setNow(new Date());
@@ -341,20 +402,34 @@ export default function ListePage() {
     setShowAdd(false);
   };
 
-  const updateQty = (item: ListItem, delta: number) => {
-    const step = getStep(item.unit || "pcs") * delta;
-    const newQty = Math.max(0, (item.quantity || 0) + step);
-    if (newQty === 0) {
-      removeItem(item.id);
-      return;
-    }
-    setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, quantity: newQty } : it)));
-    offlineFetch("/api/list", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: item.id, quantity: newQty }),
-      offlineOptimistic: true,
-    }).catch(() => {});
+  // Incrément local immédiat + synchronisation réseau différée (pour gérer
+  // l'appui maintenu qui accélère sans spammer l'API).
+  const stepQty = (item: ListItem, delta: number) => {
+    const id = item.id;
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== id) return it;
+        const step = getStep(it.unit || "pcs") * delta;
+        return { ...it, quantity: Math.max(0, Math.round(((it.quantity || 0) + step) * 100) / 100) };
+      })
+    );
+    if (syncTimers.current[id]) clearTimeout(syncTimers.current[id]);
+    syncTimers.current[id] = setTimeout(() => {
+      delete syncTimers.current[id];
+      const current = itemsRef.current.find((x) => x.id === id);
+      if (!current) return;
+      const q = current.quantity || 0;
+      if (q <= 0) {
+        removeItem(id);
+        return;
+      }
+      offlineFetch("/api/list", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, quantity: q }),
+        offlineOptimistic: true,
+      }).catch(() => {});
+    }, 450);
   };
 
   const removeItem = (id: number) => {
@@ -1043,10 +1118,10 @@ export default function ListePage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => updateQty(it, -1)}
-                        aria-label="Diminuer"
-                        className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                      <HoldButton
+                        onStep={() => stepQty(it, -1)}
+                        ariaLabel="Diminuer"
+                        className="font-mono text-sm w-7 h-7 rounded transition-colors touch-none select-none"
                         style={{
                           color: "var(--color-ink-mute)",
                           border: "1px solid var(--color-line)",
@@ -1054,11 +1129,11 @@ export default function ListePage() {
                         }}
                       >
                         −
-                      </button>
-                      <button
-                        onClick={() => updateQty(it, +1)}
-                        aria-label="Augmenter"
-                        className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                      </HoldButton>
+                      <HoldButton
+                        onStep={() => stepQty(it, +1)}
+                        ariaLabel="Augmenter"
+                        className="font-mono text-sm w-7 h-7 rounded transition-colors touch-none select-none"
                         style={{
                           color: "var(--color-ink-mute)",
                           border: "1px solid var(--color-line)",
@@ -1066,7 +1141,7 @@ export default function ListePage() {
                         }}
                       >
                         +
-                      </button>
+                      </HoldButton>
                       <button
                         onClick={() => removeItem(it.id)}
                         aria-label="Supprimer"

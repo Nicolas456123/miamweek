@@ -54,6 +54,12 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M2 3h3l2.4 12a1.5 1.5 0 0 0 1.5 1.2h8.2a1.5 1.5 0 0 0 1.5-1.2L21 7H6" />
     </svg>
   ),
+  "/ingredients": (
+    <svg {...iconProps}>
+      <path d="M12 2c-2 0-4 1.6-4 4 0 1 .3 1.8 1 2.5C7 9.7 6 11.6 6 14c0 4 2.7 7 6 7s6-3 6-7c0-2.4-1-4.3-3-5.5.7-.7 1-1.5 1-2.5 0-2.4-2-4-4-4z" />
+      <path d="M12 3v6" />
+    </svg>
+  ),
   "/inventaire": (
     <svg {...iconProps}>
       <path d="M3 8l9-5 9 5v8l-9 5-9-5z" />
@@ -84,6 +90,7 @@ const desktopLinks = [
   { href: "/recettes", label: "Recettes" },
   { href: "/liste", label: "Liste" },
   { href: "/courses", label: "Courses" },
+  { href: "/ingredients", label: "Ingrédients" },
   { href: "/inventaire", label: "Inventaire" },
   { href: "/suivi", label: "Suivi" },
 ];

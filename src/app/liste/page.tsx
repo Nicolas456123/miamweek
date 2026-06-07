@@ -458,21 +458,35 @@ export default function ListePage() {
   return (
     <div className="pb-24 md:pb-8">
       {/* Eyebrow + action */}
-      <div className="flex items-baseline justify-between mb-5">
+      <div className="flex items-baseline justify-between gap-2 mb-5">
         <p className="eyebrow">{weekLabel}</p>
-        {totalCount > 0 && (
-          <button
-            onClick={validateAndGoToCourses}
-            className="rounded-full px-4 py-2 text-sm font-medium transition-colors"
+        <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href="/courses"
+            className="rounded-full px-4 py-2 text-sm transition-colors"
             style={{
-              background: "var(--color-terracotta)",
-              color: "var(--color-cream-pale)",
-              border: "1px solid var(--color-terracotta)",
+              background: "var(--color-cream-pale)",
+              border: "1px solid var(--color-line)",
+              color: "var(--color-ink-soft)",
             }}
+            title="Voir les courses en cours"
           >
-            Mode courses →
-          </button>
-        )}
+            Courses
+          </Link>
+          {totalCount > 0 && (
+            <button
+              onClick={validateAndGoToCourses}
+              className="rounded-full px-4 py-2 text-sm font-medium transition-colors"
+              style={{
+                background: "var(--color-terracotta)",
+                color: "var(--color-cream-pale)",
+                border: "1px solid var(--color-terracotta)",
+              }}
+            >
+              Valider · courses →
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Hero + stats */}

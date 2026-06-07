@@ -56,29 +56,6 @@ export default function IngredientsPage() {
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
   const [showAdd, setShowAdd] = useState(false);
   const [addDraft, setAddDraft] = useState<Draft>(emptyDraft);
-  const [seeding, setSeeding] = useState(false);
-
-  const seedConservation = async () => {
-    if (!confirm("Pré-remplir les durées de conservation manquantes depuis la base de référence ?")) return;
-    setSeeding(true);
-    try {
-      const res = await fetch("/api/products/seed-conservation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: false }),
-      });
-      const data = await res.json();
-      if (data?.success) {
-        toast(`${data.updated} produit(s) mis à jour.`);
-        fetchProducts();
-      } else {
-        toast("Échec du pré-remplissage.");
-      }
-    } catch {
-      toast("Échec du pré-remplissage.");
-    }
-    setSeeding(false);
-  };
 
   const fetchProducts = useCallback(() => {
     fetch("/api/products")
@@ -348,32 +325,17 @@ export default function IngredientsPage() {
           Base d&apos;ingrédients · {String(products.length).padStart(2, "0")} produits
           {customCount > 0 ? ` · ${customCount} perso` : ""}
         </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={seedConservation}
-            disabled={seeding}
-            className="rounded-full px-4 py-2 text-sm transition-colors disabled:opacity-50"
-            style={{
-              background: "var(--color-cream-pale)",
-              border: "1px solid var(--color-line)",
-              color: "var(--color-ink-soft)",
-            }}
-            title="Pré-remplir les durées de conservation et après ouverture depuis la base de référence"
-          >
-            {seeding ? "…" : "⏱ Durées de conservation"}
-          </button>
-          <button
-            onClick={() => setShowAdd((v) => !v)}
-            className="rounded-full px-4 py-2 text-sm font-medium"
-            style={{
-              background: "var(--color-terracotta)",
-              color: "var(--color-cream-pale)",
-              border: "1px solid var(--color-terracotta)",
-            }}
-          >
-            {showAdd ? "× Fermer" : "+ Nouvel ingrédient"}
-          </button>
-        </div>
+        <button
+          onClick={() => setShowAdd((v) => !v)}
+          className="rounded-full px-4 py-2 text-sm font-medium"
+          style={{
+            background: "var(--color-terracotta)",
+            color: "var(--color-cream-pale)",
+            border: "1px solid var(--color-terracotta)",
+          }}
+        >
+          {showAdd ? "× Fermer" : "+ Nouvel ingrédient"}
+        </button>
       </div>
 
       {/* Hero */}

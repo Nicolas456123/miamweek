@@ -1,6 +1,32 @@
 import { query } from "@/db";
+import { CONSERVATION } from "@/lib/conservation-data";
+import { normalize } from "@/lib/utils";
 
 export const runtime = "nodejs";
+
+// Remplit automatiquement les durées de conservation manquantes depuis la base
+// de référence. Exécuté une fois par instance (les valeurs déjà présentes ou
+// éditées par l'utilisateur ne sont pas touchées).
+let conservationFilled = false;
+async function fillConservation() {
+  if (conservationFilled) return;
+  conservationFilled = true;
+  try {
+    const res = await query(
+      "SELECT id, name FROM products WHERE default_shelf_life_days IS NULL"
+    );
+    for (const p of res.rows) {
+      const data = CONSERVATION[normalize(p.name as string)];
+      if (!data) continue;
+      await query(
+        "UPDATE products SET default_shelf_life_days = ?, default_shelf_life_after_open_days = COALESCE(default_shelf_life_after_open_days, ?) WHERE id = ?",
+        [data.shelfLifeDays, data.afterOpenDays, p.id as number]
+      );
+    }
+  } catch {
+    conservationFilled = false; // réessaiera à la prochaine requête
+  }
+}
 
 export async function GET() {
   try {
@@ -12,6 +38,8 @@ export async function GET() {
     ]) {
       try { await query(col); } catch { /* already exists */ }
     }
+
+    await fillConservation();
 
     const result = await query(
       "SELECT * FROM products ORDER BY category ASC, COALESCE(sort_order, 100) ASC, name ASC"

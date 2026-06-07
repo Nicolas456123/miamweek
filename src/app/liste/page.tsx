@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { CategoryIcon } from "@/components/category-icons";
@@ -80,6 +80,63 @@ function getStep(unit: string): number {
 function numeralFR(n: number): string {
   if (n >= 0 && n < NUMERALS_FR.length) return NUMERALS_FR[n];
   return String(n);
+}
+
+// Ligne avec glisser-pour-supprimer (vers la gauche) sur mobile.
+function SwipeRow({ onRemove, children }: { onRemove: () => void; children: ReactNode }) {
+  const [dx, setDx] = useState(0);
+  const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const horizontal = useRef(false);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    horizontal.current = false;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (startX.current == null) return;
+    const dX = e.touches[0].clientX - startX.current;
+    const dY = e.touches[0].clientY - (startY.current ?? 0);
+    if (!horizontal.current && Math.abs(dX) > Math.abs(dY) && Math.abs(dX) > 8) {
+      horizontal.current = true;
+    }
+    if (horizontal.current) setDx(Math.max(-140, Math.min(0, dX)));
+  };
+  const onTouchEnd = () => {
+    if (dx < -80) onRemove();
+    setDx(0);
+    startX.current = null;
+    horizontal.current = false;
+  };
+
+  return (
+    <div className="relative overflow-hidden" style={{ background: "var(--color-cream)" }}>
+      {/* Fond rouge « supprimer » révélé au glissement */}
+      <div
+        className="absolute inset-0 flex items-center justify-end pr-5"
+        style={{ background: "var(--color-terracotta)", color: "var(--color-cream-pale)" }}
+        aria-hidden
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(${dx}px)`,
+          transition: dx === 0 ? "transform 0.2s ease" : "none",
+          background: "var(--color-cream)",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export default function ListePage() {
@@ -957,62 +1014,74 @@ export default function ListePage() {
             </header>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-px" style={{ background: "var(--color-line)" }}>
               {list.map((it) => (
-                <div
-                  key={it.id}
-                  className="flex items-center gap-3 px-1 py-3"
-                  style={{ background: "var(--color-cream)" }}
-                >
-                  {productFor(it)?.icon ? (
-                    <span className="text-base shrink-0 w-5 text-center">{productFor(it)!.icon}</span>
-                  ) : (
-                    <span
-                      className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ background: "var(--color-line)" }}
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-sm leading-tight truncate"
-                      style={{
-                        color: "var(--color-ink)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {it.product_name}
-                    </p>
-                    <p
-                      className="font-mono text-[10px] mt-0.5 truncate"
-                      style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
-                    >
-                      {it.quantity ? formatQuantity(it.quantity, it.unit) : ""}
-                      {it.source_recipe ? ` · ${it.source_recipe}` : ""}
-                    </p>
+                <SwipeRow key={it.id} onRemove={() => removeItem(it.id)}>
+                  <div className="group flex items-center gap-3 px-1 py-3">
+                    {productFor(it)?.icon ? (
+                      <span className="text-base shrink-0 w-5 text-center">{productFor(it)!.icon}</span>
+                    ) : (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ background: "var(--color-line)" }}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-sm leading-tight truncate"
+                        style={{
+                          color: "var(--color-ink)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {it.product_name}
+                      </p>
+                      <p
+                        className="font-mono text-[10px] mt-0.5 truncate"
+                        style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
+                      >
+                        {it.quantity ? formatQuantity(it.quantity, it.unit) : ""}
+                        {it.source_recipe ? ` · ${it.source_recipe}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => updateQty(it, -1)}
+                        aria-label="Diminuer"
+                        className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                        style={{
+                          color: "var(--color-ink-mute)",
+                          border: "1px solid var(--color-line)",
+                          background: "var(--color-cream-pale)",
+                        }}
+                      >
+                        −
+                      </button>
+                      <button
+                        onClick={() => updateQty(it, +1)}
+                        aria-label="Augmenter"
+                        className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                        style={{
+                          color: "var(--color-ink-mute)",
+                          border: "1px solid var(--color-line)",
+                          background: "var(--color-cream-pale)",
+                        }}
+                      >
+                        +
+                      </button>
+                      <button
+                        onClick={() => removeItem(it.id)}
+                        aria-label="Supprimer"
+                        title="Supprimer"
+                        className="w-7 h-7 rounded flex items-center justify-center transition-colors"
+                        style={{ color: "var(--color-terracotta)" }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => updateQty(it, -1)}
-                      className="font-mono text-sm w-7 h-7 rounded transition-colors"
-                      style={{
-                        color: "var(--color-ink-mute)",
-                        border: "1px solid var(--color-line)",
-                        background: "var(--color-cream-pale)",
-                      }}
-                    >
-                      −
-                    </button>
-                    <button
-                      onClick={() => updateQty(it, +1)}
-                      className="font-mono text-sm w-7 h-7 rounded transition-colors"
-                      style={{
-                        color: "var(--color-ink-mute)",
-                        border: "1px solid var(--color-line)",
-                        background: "var(--color-cream-pale)",
-                      }}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
+                </SwipeRow>
               ))}
             </div>
           </section>

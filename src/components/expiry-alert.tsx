@@ -51,6 +51,12 @@ function dayLabel(days: number): string {
 export function ExpiryAlert({ withinDays = 3 }: { withinDays?: number }) {
   const [items, setItems] = useState<{ id: number; name: string; days: number }[]>([]);
   const [dismissed, setDismissed] = useState(false);
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission;
+    }
+    return "unsupported";
+  });
 
   useEffect(() => {
     fetch("/api/pantry")
@@ -66,9 +72,35 @@ export function ExpiryAlert({ withinDays = 3 }: { withinDays?: number }) {
           .filter((x): x is { id: number; name: string; days: number } => x.days !== null && x.days <= withinDays)
           .sort((a, b) => a.days - b.days);
         setItems(alerts);
+
+        // Notification système (1×/session) si l'utilisateur a autorisé les rappels.
+        if (
+          alerts.length > 0 &&
+          typeof window !== "undefined" &&
+          "Notification" in window &&
+          Notification.permission === "granted" &&
+          !sessionStorage.getItem("miamweek_notified")
+        ) {
+          const expired = alerts.filter((a) => a.days < 0).length;
+          const body =
+            expired > 0
+              ? `${expired} produit(s) périmé(s), ${alerts.length} à consommer vite.`
+              : `${alerts.length} produit(s) à consommer vite : ${alerts.slice(0, 3).map((a) => a.name).join(", ")}…`;
+          try {
+            new Notification("MiamWeek — péremption", { body, icon: "/icon-192.png" });
+            sessionStorage.setItem("miamweek_notified", "1");
+          } catch {
+            /* ignore */
+          }
+        }
       })
       .catch(() => {});
   }, [withinDays]);
+
+  const requestNotifications = () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    Notification.requestPermission().then((p) => setNotifPerm(p));
+  };
 
   if (dismissed || items.length === 0) return null;
 
@@ -140,6 +172,15 @@ export function ExpiryAlert({ withinDays = 3 }: { withinDays?: number }) {
               >
                 Voir le stock
               </Link>
+              {notifPerm === "default" && (
+                <button
+                  onClick={requestNotifications}
+                  className="text-xs hover:underline"
+                  style={{ color: "var(--color-ink-mute)" }}
+                >
+                  🔔 Activer les rappels
+                </button>
+              )}
             </div>
           </div>
         </div>

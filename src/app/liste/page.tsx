@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } fro
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { CategoryIcon } from "@/components/category-icons";
+import { ItemRow, ItemIcon } from "@/components/item-row";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 import { rankedFilter, formatQuantity, estimatePrice, normalize, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
@@ -1131,72 +1132,53 @@ export default function ListePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-px" style={{ background: "var(--color-line)" }}>
               {list.map((it) => (
                 <SwipeRow key={it.id} onRemove={() => removeItem(it.id)}>
-                  <div className="group flex items-center gap-3 px-1 py-3">
-                    {productFor(it)?.icon ? (
-                      <span className="text-base shrink-0 w-5 text-center">{productFor(it)!.icon}</span>
-                    ) : (
-                      <span
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ background: "var(--color-line)" }}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className="text-sm leading-tight truncate"
-                        style={{
-                          color: "var(--color-ink)",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {it.product_name}
-                      </p>
-                      <p
-                        className="font-mono text-[10px] mt-0.5 truncate"
-                        style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
-                      >
-                        {it.quantity ? formatQuantity(it.quantity, it.unit) : ""}
-                        {it.source_recipe ? ` · ${it.source_recipe}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <HoldButton
-                        onStep={() => stepQty(it, -1)}
-                        ariaLabel="Diminuer"
-                        className="font-mono text-sm w-7 h-7 rounded transition-colors touch-none select-none"
-                        style={{
-                          color: "var(--color-ink-mute)",
-                          border: "1px solid var(--color-line)",
-                          background: "var(--color-cream-pale)",
-                        }}
-                      >
-                        −
-                      </HoldButton>
-                      <HoldButton
-                        onStep={() => stepQty(it, +1)}
-                        ariaLabel="Augmenter"
-                        className="font-mono text-sm w-7 h-7 rounded transition-colors touch-none select-none"
-                        style={{
-                          color: "var(--color-ink-mute)",
-                          border: "1px solid var(--color-line)",
-                          background: "var(--color-cream-pale)",
-                        }}
-                      >
-                        +
-                      </HoldButton>
-                      <button
-                        onClick={() => removeItem(it.id)}
-                        aria-label="Supprimer"
-                        title="Supprimer"
-                        className="w-7 h-7 rounded flex items-center justify-center transition-colors"
-                        style={{ color: "var(--color-terracotta)" }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+                  <ItemRow
+                    leading={<ItemIcon icon={productFor(it)?.icon} />}
+                    name={it.product_name}
+                    meta={`${it.quantity ? formatQuantity(it.quantity, it.unit) : ""}${
+                      it.source_recipe ? ` · ${it.source_recipe}` : ""
+                    }`}
+                    trailing={
+                      <>
+                        <HoldButton
+                          onStep={() => stepQty(it, -1)}
+                          ariaLabel="Diminuer"
+                          className="font-mono text-sm w-7 h-7 rounded transition-colors touch-none select-none"
+                          style={{
+                            color: "var(--color-ink-mute)",
+                            border: "1px solid var(--color-line)",
+                            background: "var(--color-cream-pale)",
+                          }}
+                        >
+                          −
+                        </HoldButton>
+                        <HoldButton
+                          onStep={() => stepQty(it, +1)}
+                          ariaLabel="Augmenter"
+                          className="font-mono text-sm w-7 h-7 rounded transition-colors touch-none select-none"
+                          style={{
+                            color: "var(--color-ink-mute)",
+                            border: "1px solid var(--color-line)",
+                            background: "var(--color-cream-pale)",
+                          }}
+                        >
+                          +
+                        </HoldButton>
+                        <button
+                          onClick={() => removeItem(it.id)}
+                          aria-label="Supprimer"
+                          title="Supprimer"
+                          className="w-7 h-7 rounded flex items-center justify-center transition-colors"
+                          style={{ color: "var(--color-terracotta)" }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </>
+                    }
+                  />
                 </SwipeRow>
               ))}
             </div>

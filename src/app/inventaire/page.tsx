@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
-import { rankedFilter, formatQuantity, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
+import { ItemRow, ItemIcon } from "@/components/item-row";
+import { rankedFilter, formatQuantity, normalize, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -34,12 +35,6 @@ const LOCATIONS: { key: LocationKey; label: string }[] = [
   { key: "placard", label: "Placard" },
   { key: "congélateur", label: "Congélateur" },
 ];
-
-const TONES: Record<LocationKey, "olive" | "neutral" | "mustard"> = {
-  frigo: "olive",
-  placard: "neutral",
-  congélateur: "mustard",
-};
 
 type EditDraft = {
   name: string;
@@ -272,6 +267,15 @@ export default function InventairePage() {
     if (!addSearch) return [];
     return rankedFilter(products, addSearch, (p) => [p.name, p.category]).slice(0, 12);
   }, [products, addSearch]);
+
+  const productIcon = (it: PantryItem): string | null => {
+    if (it.product_id != null) {
+      const p = products.find((x) => x.id === it.product_id);
+      if (p?.icon) return p.icon;
+    }
+    const p = products.find((x) => normalize(x.name) === normalize(it.product_name));
+    return p?.icon || null;
+  };
 
   const fieldCls =
     "w-full min-w-0 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-[var(--color-terracotta)]";
@@ -525,7 +529,6 @@ export default function InventairePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-px" style={{ background: "var(--color-line)" }}>
         {LOCATIONS.map((loc, idx) => {
           const list = groupedByLocation[loc.key];
-          const tone = TONES[loc.key];
           return (
             <section
               key={loc.key}
@@ -576,102 +579,86 @@ export default function InventairePage() {
                     return (
                       <li
                         key={it.id}
-                        className="group flex items-center gap-3 py-3 border-b"
+                        className="group border-b"
                         style={{ borderColor: "var(--color-line-soft)" }}
                       >
-                        <span
-                          className={`placeholder-img placeholder-img-${tone}`}
-                          style={{
-                            width: 24,
-                            height: 24,
-                            fontSize: 0,
-                            flexShrink: 0,
-                            minHeight: 24,
-                          }}
+                        <ItemRow
+                          leading={<ItemIcon icon={productIcon(it)} />}
+                          name={it.product_name}
+                          meta={`${it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}${opened ? " · ouvert" : ""}`}
+                          trailing={
+                            <>
+                              <button
+                                onClick={() => updateQty(it, -1)}
+                                aria-label="Diminuer"
+                                className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                                style={{
+                                  color: "var(--color-ink-mute)",
+                                  border: "1px solid var(--color-line)",
+                                  background: "var(--color-cream-pale)",
+                                }}
+                              >
+                                −
+                              </button>
+                              <button
+                                onClick={() => updateQty(it, +1)}
+                                aria-label="Augmenter"
+                                className="font-mono text-sm w-7 h-7 rounded transition-colors"
+                                style={{
+                                  color: "var(--color-ink-mute)",
+                                  border: "1px solid var(--color-line)",
+                                  background: "var(--color-cream-pale)",
+                                }}
+                              >
+                                +
+                              </button>
+                              <span
+                                className="font-mono text-xs tnum shrink-0 w-8 text-right"
+                                style={{
+                                  color:
+                                    dlc.tone === "danger"
+                                      ? "var(--color-terracotta)"
+                                      : dlc.tone === "warn"
+                                      ? "#8a6d10"
+                                      : "var(--color-ink-faint)",
+                                  letterSpacing: "0.04em",
+                                }}
+                              >
+                                <span className="block leading-none">{dlc.text}</span>
+                                <span
+                                  className="block uppercase mt-0.5"
+                                  style={{ fontSize: 8, color: "var(--color-ink-faint)", letterSpacing: "0.08em" }}
+                                >
+                                  {opened ? "OUV." : "DLC"}
+                                </span>
+                              </span>
+                              <button
+                                onClick={() => startEdit(it)}
+                                aria-label="Modifier"
+                                title="Modifier le produit"
+                                className="shrink-0 w-7 h-7 rounded flex items-center justify-center transition-colors"
+                                style={{
+                                  color: "var(--color-ink-mute)",
+                                  border: "1px solid var(--color-line)",
+                                  background: "var(--color-cream-pale)",
+                                }}
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M12 20h9" />
+                                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => removeItem(it.id)}
+                                aria-label="Supprimer"
+                                className="font-mono text-[12px] md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                                style={{ color: "var(--color-terracotta)" }}
+                              >
+                                ×
+                              </button>
+                            </>
+                          }
                         />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm leading-tight truncate" style={{ color: "var(--color-ink)" }}>
-                            {it.product_name}
-                          </p>
-                          <p
-                            className="font-mono text-[10px] truncate"
-                            style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
-                          >
-                            {it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}
-                            {opened ? " · ouvert" : ""}
-                          </p>
-                        </div>
-                        {/* Steppers pour ajuster rapidement le stock */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => updateQty(it, -1)}
-                            aria-label="Diminuer"
-                            className="font-mono text-sm w-7 h-7 rounded transition-colors"
-                            style={{
-                              color: "var(--color-ink-mute)",
-                              border: "1px solid var(--color-line)",
-                              background: "var(--color-cream-pale)",
-                            }}
-                          >
-                            −
-                          </button>
-                          <button
-                            onClick={() => updateQty(it, +1)}
-                            aria-label="Augmenter"
-                            className="font-mono text-sm w-7 h-7 rounded transition-colors"
-                            style={{
-                              color: "var(--color-ink-mute)",
-                              border: "1px solid var(--color-line)",
-                              background: "var(--color-cream-pale)",
-                            }}
-                          >
-                            +
-                          </button>
-                        </div>
-                        <span
-                          className="font-mono text-xs tnum shrink-0 w-8 text-right"
-                          style={{
-                            color:
-                              dlc.tone === "danger"
-                                ? "var(--color-terracotta)"
-                                : dlc.tone === "warn"
-                                ? "#8a6d10"
-                                : "var(--color-ink-faint)",
-                            letterSpacing: "0.04em",
-                          }}
-                        >
-                          <span className="block leading-none">{dlc.text}</span>
-                          <span
-                            className="block uppercase mt-0.5"
-                            style={{ fontSize: 8, color: "var(--color-ink-faint)", letterSpacing: "0.08em" }}
-                          >
-                            {opened ? "OUV." : "DLC"}
-                          </span>
-                        </span>
-                        <button
-                          onClick={() => startEdit(it)}
-                          aria-label="Modifier"
-                          title="Modifier le produit"
-                          className="shrink-0 w-7 h-7 rounded flex items-center justify-center transition-colors"
-                          style={{
-                            color: "var(--color-ink-mute)",
-                            border: "1px solid var(--color-line)",
-                            background: "var(--color-cream-pale)",
-                          }}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => removeItem(it.id)}
-                          aria-label="Supprimer"
-                          className="font-mono text-[12px] md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                          style={{ color: "var(--color-terracotta)" }}
-                        >
-                          ×
-                        </button>
                       </li>
                     );
                   })}

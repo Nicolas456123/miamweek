@@ -3,13 +3,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icons";
-import { formatQuantity, estimatePrice } from "@/lib/utils";
+import { ItemRow, ItemIcon } from "@/components/item-row";
+import { formatQuantity, estimatePrice, normalize } from "@/lib/utils";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 import { useToast } from "@/components/toast";
 import {
   Button,
   Card,
-  Chip,
   EmptyState,
   PageHeader,
 } from "@/components/ui-kit";
@@ -31,6 +31,7 @@ type ListItem = {
 export default function CoursesPage() {
   const { toast } = useToast();
   const [items, setItems] = useState<ListItem[]>([]);
+  const [products, setProducts] = useState<{ id: number; name: string; icon: string | null }[]>([]);
   const [quickAdd, setQuickAdd] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
@@ -40,6 +41,22 @@ export default function CoursesPage() {
       .then((data) => setItems(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((d) => setProducts(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, []);
+
+  const iconFor = (item: ListItem): string | null => {
+    if (item.product_id != null) {
+      const p = products.find((x) => x.id === item.product_id);
+      if (p?.icon) return p.icon;
+    }
+    const p = products.find((x) => normalize(x.name) === normalize(item.product_name));
+    return p?.icon || null;
+  };
 
   const { isOnline, queueSize, isSyncing, syncNow, safeFetch } = useOfflineSync(fetchItems);
 
@@ -403,93 +420,60 @@ export default function CoursesPage() {
                 <div>
                   {categoryItems.map((item, idx) => {
                     const isUnavailable = !!item.unavailable;
+                    const qtyText = item.quantity ? formatQuantity(item.quantity, item.unit) : "";
+                    const meta = isUnavailable
+                      ? "indisponible en magasin"
+                      : `${qtyText}${item.source_recipe ? ` · ${item.source_recipe}` : ""}`;
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center gap-2 px-4 py-3 transition-colors"
+                        className="px-3"
                         style={{
                           borderTop: idx > 0 ? "1px solid var(--color-line-soft)" : "none",
                           background: isUnavailable ? "rgba(201,162,39,0.08)" : "transparent",
                         }}
                       >
-                        {/* Zone principale : cocher « pris » */}
-                        <button
-                          onClick={() => toggleItem(item.id, !!item.checked)}
-                          disabled={isUnavailable}
-                          className="flex items-center gap-3 flex-1 min-w-0 text-left transition-colors disabled:cursor-not-allowed"
-                        >
-                          <div
-                            className="w-5 h-5 rounded flex items-center justify-center shrink-0 transition-colors"
-                            style={{
-                              background: item.checked ? "var(--color-olive)" : "transparent",
-                              border: `1.5px solid ${
-                                item.checked ? "var(--color-olive)" : "var(--color-line)"
-                              }`,
-                              color: "var(--color-cream-pale)",
-                              opacity: isUnavailable ? 0.4 : 1,
-                            }}
-                          >
-                            {!!item.checked && (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <div
-                            className={`flex-1 min-w-0 ${
-                              !!item.checked || isUnavailable ? "line-through opacity-50" : ""
-                            }`}
-                          >
-                            <span className="text-sm block truncate" style={{ color: "var(--color-ink)" }}>
-                              {item.product_name}
-                            </span>
-                            {isUnavailable ? (
+                        <ItemRow
+                          onClick={isUnavailable ? undefined : () => toggleItem(item.id, !!item.checked)}
+                          faded={!!item.checked || isUnavailable}
+                          strike={!!item.checked || isUnavailable}
+                          leading={
+                            item.checked ? (
                               <span
-                                className="font-mono text-[10px] block truncate"
-                                style={{ color: "#8a6d10", letterSpacing: "0.04em" }}
+                                className="w-5 h-5 rounded-full flex items-center justify-center"
+                                style={{ background: "var(--color-olive)", color: "var(--color-cream-pale)" }}
                               >
-                                indisponible en magasin
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
                               </span>
                             ) : (
-                              item.source_recipe && (
-                                <span
-                                  className="font-mono text-[10px] block truncate"
-                                  style={{ color: "var(--color-terracotta-deep)", letterSpacing: "0.04em" }}
-                                >
-                                  {item.source_recipe}
-                                </span>
-                              )
-                            )}
-                          </div>
-                          {item.quantity && (
-                            <span
-                              className="font-mono text-xs tnum shrink-0"
-                              style={{ color: "var(--color-ink-mute)" }}
+                              <ItemIcon icon={iconFor(item)} />
+                            )
+                          }
+                          name={item.product_name}
+                          meta={meta}
+                          trailing={
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleUnavailable(item.id, isUnavailable);
+                              }}
+                              title={isUnavailable ? "Disponible" : "Marquer indisponible"}
+                              aria-label={isUnavailable ? "Marquer disponible" : "Marquer indisponible"}
+                              className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                              style={{
+                                background: isUnavailable ? "var(--color-mustard)" : "transparent",
+                                border: `1.5px solid ${isUnavailable ? "var(--color-mustard)" : "var(--color-line)"}`,
+                                color: isUnavailable ? "var(--color-cream-pale)" : "var(--color-ink-mute)",
+                              }}
                             >
-                              {formatQuantity(item.quantity, item.unit)}
-                            </span>
-                          )}
-                          {item.source === "recipe" && !item.source_recipe && !isUnavailable && (
-                            <Chip tone="terra">recette</Chip>
-                          )}
-                        </button>
-
-                        {/* Bouton « indisponible » */}
-                        <button
-                          onClick={() => toggleUnavailable(item.id, isUnavailable)}
-                          title={isUnavailable ? "Disponible" : "Marquer indisponible"}
-                          aria-label={isUnavailable ? "Marquer disponible" : "Marquer indisponible"}
-                          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
-                          style={{
-                            background: isUnavailable ? "var(--color-mustard)" : "transparent",
-                            border: `1.5px solid ${isUnavailable ? "var(--color-mustard)" : "var(--color-line)"}`,
-                            color: isUnavailable ? "var(--color-cream-pale)" : "var(--color-ink-mute)",
-                          }}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                          </svg>
-                        </button>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                              </svg>
+                            </button>
+                          }
+                        />
                       </div>
                     );
                   })}

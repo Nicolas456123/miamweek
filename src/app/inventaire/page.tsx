@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/components/toast";
-import { rankedFilter, formatQuantity } from "@/lib/utils";
+import { rankedFilter, formatQuantity, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -22,6 +22,8 @@ type PantryItem = {
   location: string | null;
   expires_at: string | null;
   added_at: string | null;
+  opened_at: string | null;
+  shelf_life_after_open_days: number | null;
 };
 
 type LocationKey = "frigo" | "placard" | "congélateur";
@@ -38,6 +40,18 @@ const TONES: Record<LocationKey, "olive" | "neutral" | "mustard"> = {
   congélateur: "mustard",
 };
 
+type EditDraft = {
+  name: string;
+  quantity: string;
+  unit: string;
+  category: string;
+  location: LocationKey;
+  addedAt: string;
+  expiresAt: string;
+  openedAt: string;
+  shelfLife: string;
+};
+
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -45,6 +59,32 @@ function daysUntil(dateStr: string | null): number | null {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.ceil((+d - +now) / 86400000);
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+// Péremption effective : la plus proche entre la DLC du produit et
+// (date d'ouverture + jours de conservation après ouverture).
+// Ex : lait DLC dans 12 j, mais ouvert aujourd'hui avec 5 j max → 5 j.
+function effectiveExpiry(it: PantryItem): string | null {
+  const base = it.expires_at;
+  if (it.opened_at && it.shelf_life_after_open_days != null) {
+    const afterOpen = addDays(it.opened_at, it.shelf_life_after_open_days);
+    if (!base) return afterOpen;
+    return new Date(afterOpen) < new Date(base) ? afterOpen : base;
+  }
+  return base;
+}
+
+function isoDate(v: string | null): string {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(+d)) return "";
+  return d.toISOString().split("T")[0];
 }
 
 function dlcLabel(days: number | null): { text: string; tone: "danger" | "warn" | "neutral" } {
@@ -66,7 +106,7 @@ export default function InventairePage() {
   const [addSearch, setAddSearch] = useState("");
   const [activeLocation, setActiveLocation] = useState<LocationKey>("frigo");
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState("");
+  const [draft, setDraft] = useState<EditDraft | null>(null);
 
   const fetchPantry = () => {
     fetch("/api/pantry")
@@ -131,31 +171,71 @@ export default function InventairePage() {
     }
   };
 
-  const startEditQty = (it: PantryItem) => {
+  const startEdit = (it: PantryItem) => {
     setEditingId(it.id);
-    setEditValue(it.quantity != null ? String(it.quantity) : "");
+    setDraft({
+      name: it.product_name,
+      quantity: it.quantity != null ? String(it.quantity) : "",
+      unit: it.unit || "pcs",
+      category: it.category || "Autre",
+      location: (it.location as LocationKey) || "placard",
+      addedAt: isoDate(it.added_at),
+      expiresAt: isoDate(it.expires_at),
+      openedAt: isoDate(it.opened_at),
+      shelfLife:
+        it.shelf_life_after_open_days != null ? String(it.shelf_life_after_open_days) : "",
+    });
   };
 
-  const saveQty = async (it: PantryItem) => {
-    const raw = editValue.replace(",", ".").trim();
+  const cancelEdit = () => {
     setEditingId(null);
-    if (raw === "" || isNaN(Number(raw))) return;
-    const newQty = Math.max(0, Number(raw));
-    if (newQty === 0) {
-      removeItem(it.id);
-      return;
-    }
-    if (newQty === it.quantity) return;
+    setDraft(null);
+  };
+
+  const saveEdit = async () => {
+    if (editingId == null || !draft) return;
+    const qty = draft.quantity ? Number(draft.quantity.replace(",", ".")) : null;
+    const shelf = draft.shelfLife ? Number(draft.shelfLife) : null;
+    const payload = {
+      id: editingId,
+      productName: draft.name.trim() || undefined,
+      quantity: qty,
+      unit: draft.unit,
+      category: draft.category,
+      location: draft.location,
+      addedAt: draft.addedAt || null,
+      expiresAt: draft.expiresAt || null,
+      openedAt: draft.openedAt || null,
+      shelfLifeAfterOpenDays: shelf,
+    };
     setItems((prev) =>
-      prev.map((x) => (x.id === it.id ? { ...x, quantity: newQty } : x))
+      prev.map((x) =>
+        x.id === editingId
+          ? {
+              ...x,
+              product_name: payload.productName ?? x.product_name,
+              quantity: qty,
+              unit: draft.unit,
+              category: draft.category,
+              location: draft.location,
+              added_at: payload.addedAt,
+              expires_at: payload.expiresAt,
+              opened_at: payload.openedAt,
+              shelf_life_after_open_days: shelf,
+            }
+          : x
+      )
     );
+    cancelEdit();
     try {
       await fetch("/api/pantry", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: it.id, quantity: newQty }),
+        body: JSON.stringify(payload),
       });
+      toast("Produit mis à jour.");
     } catch {
+      toast("Échec de la mise à jour.");
       fetchPantry();
     }
   };
@@ -177,7 +257,7 @@ export default function InventairePage() {
   const total = items.length;
   const expiring = useMemo(() => {
     return items.filter((it) => {
-      const d = daysUntil(it.expires_at);
+      const d = daysUntil(effectiveExpiry(it));
       return d !== null && d <= 3;
     }).length;
   }, [items]);
@@ -189,6 +269,98 @@ export default function InventairePage() {
     if (!addSearch) return [];
     return rankedFilter(products, addSearch, (p) => [p.name, p.category]).slice(0, 12);
   }, [products, addSearch]);
+
+  const fieldCls =
+    "w-full bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-[var(--color-terracotta)]";
+
+  const renderEditPanel = () => {
+    if (!draft) return null;
+    const set = (patch: Partial<EditDraft>) => setDraft({ ...draft, ...patch });
+    return (
+      <div className="rounded-md p-3 space-y-2.5" style={{ background: "var(--color-cream-deep)", border: "1px solid var(--color-terracotta)" }}>
+        <label className="block">
+          <span className="eyebrow block mb-1">Nom</span>
+          <input type="text" value={draft.name} onChange={(e) => set({ name: e.target.value })} className={fieldCls} autoFocus />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="eyebrow block mb-1">Quantité</span>
+            <input type="number" inputMode="decimal" value={draft.quantity} onChange={(e) => set({ quantity: e.target.value })} className={`${fieldCls} tnum`} />
+          </label>
+          <label className="block">
+            <span className="eyebrow block mb-1">Unité</span>
+            <select value={draft.unit} onChange={(e) => set({ unit: e.target.value })} className={fieldCls}>
+              {(UNITS as readonly string[]).includes(draft.unit) ? null : <option value={draft.unit}>{draft.unit}</option>}
+              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="eyebrow block mb-1">Emplacement</span>
+            <select value={draft.location} onChange={(e) => set({ location: e.target.value as LocationKey })} className={fieldCls}>
+              {LOCATIONS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="eyebrow block mb-1">Catégorie</span>
+            <select value={draft.category} onChange={(e) => set({ category: e.target.value })} className={fieldCls}>
+              {[...PRODUCT_CATEGORIES, "Autre"].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="eyebrow block mb-1">Date d&apos;ajout</span>
+            <input type="date" value={draft.addedAt} onChange={(e) => set({ addedAt: e.target.value })} className={fieldCls} />
+          </label>
+          <label className="block">
+            <span className="eyebrow block mb-1">Péremption (DLC)</span>
+            <input type="date" value={draft.expiresAt} onChange={(e) => set({ expiresAt: e.target.value })} className={fieldCls} />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="eyebrow block mb-1">Date d&apos;ouverture</span>
+            <input type="date" value={draft.openedAt} onChange={(e) => set({ openedAt: e.target.value })} className={fieldCls} />
+          </label>
+          <label className="block">
+            <span className="eyebrow block mb-1">Max après ouverture (j)</span>
+            <input type="number" inputMode="numeric" placeholder="ex : 5" value={draft.shelfLife} onChange={(e) => set({ shelfLife: e.target.value })} className={`${fieldCls} tnum`} />
+          </label>
+        </div>
+        {draft.openedAt && draft.shelfLife && (
+          <p className="font-mono text-[10px]" style={{ color: "#8a6d10", letterSpacing: "0.04em" }}>
+            → à consommer avant le {addDays(draft.openedAt, Number(draft.shelfLife))}
+          </p>
+        )}
+        <div className="flex items-center justify-between pt-1">
+          <button
+            onClick={() => {
+              if (editingId != null) removeItem(editingId);
+              cancelEdit();
+            }}
+            className="text-xs px-3 py-1.5 rounded-full"
+            style={{ color: "var(--color-terracotta-deep)", border: "1px solid var(--color-line)" }}
+          >
+            Supprimer
+          </button>
+          <div className="flex gap-2">
+            <button onClick={cancelEdit} className="text-sm px-3 py-1.5 rounded-full" style={{ color: "var(--color-ink-mute)", border: "1px solid var(--color-line)" }}>
+              Annuler
+            </button>
+            <button
+              onClick={saveEdit}
+              className="text-sm px-4 py-1.5 rounded-full font-medium"
+              style={{ background: "var(--color-terracotta)", color: "var(--color-cream-pale)", border: "1px solid var(--color-terracotta)" }}
+            >
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="pb-24 md:pb-8">
@@ -363,8 +535,17 @@ export default function InventairePage() {
               ) : (
                 <ul className="px-4 space-y-px">
                   {list.map((it) => {
-                    const days = daysUntil(it.expires_at);
+                    const effExp = effectiveExpiry(it);
+                    const days = daysUntil(effExp);
                     const dlc = dlcLabel(days);
+                    const opened = !!it.opened_at;
+                    if (editingId === it.id && draft) {
+                      return (
+                        <li key={it.id} className="py-3 border-b" style={{ borderColor: "var(--color-line-soft)" }}>
+                          {renderEditPanel()}
+                        </li>
+                      );
+                    }
                     return (
                       <li
                         key={it.id}
@@ -385,37 +566,15 @@ export default function InventairePage() {
                           <p className="text-sm leading-tight truncate" style={{ color: "var(--color-ink)" }}>
                             {it.product_name}
                           </p>
-                          {editingId === it.id ? (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                value={editValue}
-                                autoFocus
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={() => saveQty(it)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") saveQty(it);
-                                  if (e.key === "Escape") setEditingId(null);
-                                }}
-                                className="w-16 bg-[var(--color-cream-pale)] border border-[var(--color-terracotta)] rounded px-1.5 py-0.5 text-xs tnum focus:outline-none"
-                              />
-                              <span className="font-mono text-[10px]" style={{ color: "var(--color-ink-mute)" }}>
-                                {it.unit}
-                              </span>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => startEditQty(it)}
-                              title="Modifier la quantité"
-                              className="font-mono text-[10px] truncate text-left hover:underline"
-                              style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
-                            >
-                              {it.quantity ? formatQuantity(it.quantity, it.unit) : "— (modifier)"}
-                            </button>
-                          )}
+                          <p
+                            className="font-mono text-[10px] truncate"
+                            style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
+                          >
+                            {it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}
+                            {opened ? " · ouvert" : ""}
+                          </p>
                         </div>
-                        {/* Steppers pour ajuster le stock */}
+                        {/* Steppers pour ajuster rapidement le stock */}
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => updateQty(it, -1)}
@@ -459,13 +618,29 @@ export default function InventairePage() {
                             className="block uppercase mt-0.5"
                             style={{ fontSize: 8, color: "var(--color-ink-faint)", letterSpacing: "0.08em" }}
                           >
-                            DLC
+                            {opened ? "OUV." : "DLC"}
                           </span>
                         </span>
                         <button
+                          onClick={() => startEdit(it)}
+                          aria-label="Modifier"
+                          title="Modifier le produit"
+                          className="shrink-0 w-7 h-7 rounded flex items-center justify-center transition-colors"
+                          style={{
+                            color: "var(--color-ink-mute)",
+                            border: "1px solid var(--color-line)",
+                            background: "var(--color-cream-pale)",
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                          </svg>
+                        </button>
+                        <button
                           onClick={() => removeItem(it.id)}
                           aria-label="Supprimer"
-                          className="font-mono text-[12px] md:opacity-0 md:group-hover:opacity-100 transition-opacity ml-1"
+                          className="font-mono text-[12px] md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                           style={{ color: "var(--color-terracotta)" }}
                         >
                           ×

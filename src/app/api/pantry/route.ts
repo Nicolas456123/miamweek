@@ -4,6 +4,16 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    // Ensure optional columns exist (édition complète : ouverture, péremption…)
+    for (const col of [
+      "ALTER TABLE pantry_items ADD COLUMN opened_at TEXT",
+      "ALTER TABLE pantry_items ADD COLUMN shelf_life_after_open_days INTEGER",
+      "ALTER TABLE pantry_items ADD COLUMN package_size REAL",
+      "ALTER TABLE pantry_items ADD COLUMN brand TEXT",
+    ]) {
+      try { await query(col); } catch { /* already exists */ }
+    }
+
     const result = await query(
       `SELECT p.*, pr.icon, pr.default_unit as defaultUnit,
               pr.kcal_per_100, pr.protein_per_100, pr.carbs_per_100, pr.fat_per_100, pr.fiber_per_100,
@@ -82,9 +92,12 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const {
       id,
+      productName,
       quantity,
       unit,
+      category,
       location,
+      addedAt,
       expiresAt,
       openedAt,
       shelfLifeAfterOpenDays,
@@ -99,6 +112,10 @@ export async function PUT(request: Request) {
     const updates: string[] = [];
     const args: (string | number | null)[] = [];
 
+    if (productName !== undefined) {
+      updates.push("product_name = ?");
+      args.push(productName);
+    }
     if (quantity !== undefined) {
       updates.push("quantity = ?");
       args.push(quantity);
@@ -107,9 +124,17 @@ export async function PUT(request: Request) {
       updates.push("unit = ?");
       args.push(unit);
     }
+    if (category !== undefined) {
+      updates.push("category = ?");
+      args.push(category);
+    }
     if (location !== undefined) {
       updates.push("location = ?");
       args.push(location);
+    }
+    if (addedAt !== undefined) {
+      updates.push("added_at = ?");
+      args.push(addedAt);
     }
     if (expiresAt !== undefined) {
       updates.push("expires_at = ?");

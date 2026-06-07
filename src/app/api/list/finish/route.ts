@@ -19,15 +19,23 @@ export async function POST() {
       )`);
     } catch { /* already exists */ }
 
+    // Ensure the "unavailable" column exists before we touch it
+    try { await query("ALTER TABLE list_items ADD COLUMN unavailable INTEGER DEFAULT 0"); } catch { /* already exists */ }
+
     // Get all active items
     const activeResult = await query(
       "SELECT * FROM list_items WHERE list_status = 'active'"
     );
     const activeItems = activeResult.rows;
 
-    // Mark all active items as done
+    // Articles pris → 'done' (archivés, ajoutés à l'inventaire ci-dessous).
     await query(
-      "UPDATE list_items SET list_status = 'done' WHERE list_status = 'active'"
+      "UPDATE list_items SET list_status = 'done' WHERE list_status = 'active' AND checked = 1"
+    );
+    // Articles non pris (y compris indisponibles) → retour en préparation
+    // pour la prochaine liste, afin de ne pas les perdre.
+    await query(
+      "UPDATE list_items SET list_status = 'prep', checked = 0, unavailable = 0 WHERE list_status = 'active'"
     );
 
     const today = new Date().toISOString().split("T")[0];

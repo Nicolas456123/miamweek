@@ -29,6 +29,14 @@ export const categoryIcons: Record<string, React.ReactNode> = {
       <path d="M12.5 11c1-1 2.5-1 3.5 0" stroke="#f59e0b" opacity="0.6"/>
     </svg>
   ),
+  "Desserts & Sucré": (
+    <svg {...s}>
+      <path d="M5 21h14l-1.5-9H6.5L5 21z" fill="#fde4ef" stroke="#ec4899"/>
+      <path d="M8 12c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke="#ec4899"/>
+      <circle cx="12" cy="5" r="1.5" fill="#ec4899"/>
+      <path d="M9 16h6" stroke="#ec4899" opacity="0.5"/>
+    </svg>
+  ),
   "Épicerie": (
     <svg {...s}>
       <rect x="5" y="6" width="14" height="14" rx="2" fill="#fef3c7" stroke="#f59e0b"/>

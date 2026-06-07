@@ -106,7 +106,7 @@ export default function RecettesPage() {
         const names = data
           .filter((it) => {
             const d = daysUntil(effectiveExpiry(it));
-            return d !== null && d <= 5;
+            return d !== null && d >= 0 && d <= 5;
           })
           .map((it) => normalize(it.product_name))
           .filter(Boolean);

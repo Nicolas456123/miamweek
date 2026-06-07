@@ -136,7 +136,7 @@ export default function PlanningPage() {
         const names = data
           .filter((it) => {
             const dd = daysUntil(effectiveExpiry(it));
-            return dd !== null && dd <= 3;
+            return dd !== null && dd >= 0 && dd <= 3;
           })
           .map((it) => normalize(it.product_name))
           .filter(Boolean);

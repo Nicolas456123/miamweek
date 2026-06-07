@@ -82,9 +82,12 @@ export function ExpiryAlert({ withinDays = 3 }: { withinDays?: number }) {
           !sessionStorage.getItem("miamweek_notified")
         ) {
           const expired = alerts.filter((a) => a.days < 0).length;
+          const soon = alerts.length - expired;
           const body =
             expired > 0
-              ? `${expired} produit(s) périmé(s), ${alerts.length} à consommer vite.`
+              ? soon > 0
+                ? `${expired} à jeter, ${soon} à consommer vite.`
+                : `${expired} produit(s) à jeter.`
               : `${alerts.length} produit(s) à consommer vite : ${alerts.slice(0, 3).map((a) => a.name).join(", ")}…`;
           try {
             new Notification("MiamWeek — péremption", { body, icon: "/icon-192.png" });
@@ -105,11 +108,13 @@ export function ExpiryAlert({ withinDays = 3 }: { withinDays?: number }) {
   if (dismissed || items.length === 0) return null;
 
   const expiredCount = items.filter((i) => i.days < 0).length;
+  const soonCount = items.length - expiredCount;
   const headline =
     expiredCount > 0
-      ? `${expiredCount} produit${expiredCount > 1 ? "s" : ""} périmé${expiredCount > 1 ? "s" : ""}` +
-        (items.length > expiredCount ? `, ${items.length - expiredCount} bientôt` : "")
-      : `${items.length} produit${items.length > 1 ? "s" : ""} à consommer vite`;
+      ? soonCount > 0
+        ? `${expiredCount} à jeter · ${soonCount} à consommer vite`
+        : `${expiredCount} produit${expiredCount > 1 ? "s" : ""} à jeter`
+      : `${soonCount} produit${soonCount > 1 ? "s" : ""} à consommer vite`;
 
   return (
     <div
@@ -157,14 +162,16 @@ export function ExpiryAlert({ withinDays = 3 }: { withinDays?: number }) {
                 </li>
               )}
             </ul>
-            <div className="mt-2 flex items-center gap-3">
-              <Link
-                href="/recettes?antigaspi=1"
-                className="text-xs font-medium hover:underline"
-                style={{ color: "var(--color-olive-deep)" }}
-              >
-                🌱 Cuisiner avant que ce soit trop tard →
-              </Link>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {soonCount > 0 && (
+                <Link
+                  href="/recettes?antigaspi=1"
+                  className="text-xs font-medium hover:underline"
+                  style={{ color: "var(--color-olive-deep)" }}
+                >
+                  🌱 Cuisiner avant que ce soit trop tard →
+                </Link>
+              )}
               <Link
                 href="/inventaire"
                 className="text-xs hover:underline"

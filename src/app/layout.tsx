@@ -4,6 +4,7 @@ import "./globals.css";
 import { Nav } from "@/components/nav";
 import { Providers } from "@/components/providers";
 import { PageTransition } from "@/components/page-transition";
+import { ServiceWorkerRegister } from "@/components/sw-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,6 +46,7 @@ export default function RootLayout({
     >
       <body className="h-full flex flex-col bg-background">
         <Providers>
+          <ServiceWorkerRegister />
           <Nav />
           <main className="flex-1 max-w-6xl mx-auto w-full px-4 pt-6 pb-24 md:pt-4 md:pb-4 min-h-0">
             <PageTransition>{children}</PageTransition>

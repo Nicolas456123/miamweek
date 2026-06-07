@@ -12,7 +12,8 @@ import {
   PageHeader,
 } from "@/components/ui-kit";
 import { RecipePhoto } from "@/components/recipe-photo";
-import { matchSearch, formatQuantity, UNITS } from "@/lib/utils";
+import { matchSearch, formatQuantity, normalize, UNITS } from "@/lib/utils";
+import { effectiveExpiry, daysUntil, type ExpiryItem } from "@/lib/expiry";
 
 type Ingredient = {
   id?: number;
@@ -63,7 +64,9 @@ export default function RecettesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterFavorites, setFilterFavorites] = useState(false);
+  const [filterAntiGaspi, setFilterAntiGaspi] = useState(false);
   const [search, setSearch] = useState("");
+  const [expiringNames, setExpiringNames] = useState<string[]>([]);
   const [addedToList, setAddedToList] = useState<Set<number>>(new Set());
   const [form, setForm] = useState({
     name: "",
@@ -89,7 +92,35 @@ export default function RecettesPage() {
 
   useEffect(() => {
     fetchRecipes();
+    // Ingrédients du stock qui périment bientôt (≤ 5 j) — pour l'anti-gaspi.
+    fetch("/api/pantry")
+      .then((r) => r.json())
+      .then((data: ExpiryItem[]) => {
+        if (!Array.isArray(data)) return;
+        const names = data
+          .filter((it) => {
+            const d = daysUntil(effectiveExpiry(it));
+            return d !== null && d <= 5;
+          })
+          .map((it) => normalize(it.product_name))
+          .filter(Boolean);
+        setExpiringNames([...new Set(names)]);
+      })
+      .catch(() => {});
   }, []);
+
+  // Nombre d'ingrédients d'une recette qui correspondent à un produit du
+  // stock proche de la péremption (correspondance souple sur le nom).
+  const antiGaspiCount = (recipe: Recipe): number => {
+    if (expiringNames.length === 0) return 0;
+    let n = 0;
+    for (const ing of recipe.ingredients) {
+      const name = normalize(ing.name);
+      if (!name) continue;
+      if (expiringNames.some((e) => e.includes(name) || name.includes(e))) n++;
+    }
+    return n;
+  };
 
   const toggleFavorite = async (recipeId: number) => {
     setRecipes((prev) =>
@@ -291,20 +322,27 @@ export default function RecettesPage() {
     ...new Set(recipes.map((r) => r.category).filter(Boolean)),
   ] as string[];
 
-  const filteredRecipes = recipes.filter((r) => {
-    if (filterFavorites && !r.is_favorite) return false;
-    if (filterCategory && r.category !== filterCategory) return false;
-    if (search) {
-      return matchSearch(
-        search,
-        r.name,
-        r.description,
-        r.category,
-        r.ingredients.map((i) => i.name).join(" ")
-      );
-    }
-    return true;
-  });
+  const filteredRecipes = recipes
+    .filter((r) => {
+      if (filterFavorites && !r.is_favorite) return false;
+      if (filterCategory && r.category !== filterCategory) return false;
+      if (filterAntiGaspi && antiGaspiCount(r) === 0) return false;
+      if (search) {
+        return matchSearch(
+          search,
+          r.name,
+          r.description,
+          r.category,
+          r.ingredients.map((i) => i.name).join(" ")
+        );
+      }
+      return true;
+    })
+    // En mode anti-gaspi, les recettes qui utilisent le plus d'ingrédients
+    // proches de la péremption d'abord.
+    .sort((a, b) =>
+      filterAntiGaspi ? antiGaspiCount(b) - antiGaspiCount(a) : 0
+    );
 
   return (
     <div className="pb-24 md:pb-8">
@@ -371,10 +409,11 @@ export default function RecettesPage() {
             onClick={() => {
               setFilterCategory("");
               setFilterFavorites(false);
+              setFilterAntiGaspi(false);
             }}
             className="shrink-0"
           >
-            <Chip tone={!filterCategory && !filterFavorites ? "ink" : "neutral"}>
+            <Chip tone={!filterCategory && !filterFavorites && !filterAntiGaspi ? "ink" : "neutral"}>
               Toutes
             </Chip>
           </button>
@@ -382,11 +421,24 @@ export default function RecettesPage() {
             onClick={() => {
               setFilterFavorites(!filterFavorites);
               setFilterCategory("");
+              setFilterAntiGaspi(false);
             }}
             className="shrink-0"
           >
             <Chip tone={filterFavorites ? "terra" : "neutral"}>Favoris</Chip>
           </button>
+          {expiringNames.length > 0 && (
+            <button
+              onClick={() => {
+                setFilterAntiGaspi(!filterAntiGaspi);
+                setFilterCategory("");
+                setFilterFavorites(false);
+              }}
+              className="shrink-0"
+            >
+              <Chip tone={filterAntiGaspi ? "olive" : "neutral"}>🌱 Anti-gaspi</Chip>
+            </button>
+          )}
           {categories.map((c) => (
             <button
               key={c}
@@ -720,6 +772,9 @@ export default function RecettesPage() {
                   )}
 
                   <div className="flex flex-wrap gap-1.5 mb-3">
+                    {antiGaspiCount(recipe) > 0 && (
+                      <Chip tone="olive">🌱 anti-gaspi · {antiGaspiCount(recipe)}</Chip>
+                    )}
                     {recipe.category && <Chip tone="neutral">{recipe.category}</Chip>}
                     {recipe.difficulty && (
                       <Chip tone={diffTone as "olive" | "mustard" | "terra" | "neutral"}>

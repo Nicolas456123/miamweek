@@ -83,30 +83,31 @@ function NavIcon({ href, size = 18 }: { href: string; size?: number }) {
   );
 }
 
-const desktopLinks = [
-  { href: "/", label: "Accueil" },
-  { href: "/planning", label: "Planning" },
-  { href: "/menu", label: "Menu" },
-  { href: "/recettes", label: "Recettes" },
-  { href: "/liste", label: "Liste" },
-  { href: "/inventaire", label: "Stock" },
-  { href: "/suivi", label: "Suivi" },
-];
+// Onglets principaux regroupés. Chaque groupe pointe vers sa page par défaut
+// et reste actif sur l'ensemble de ses pages (sous-navigation dans SubNav).
+type NavGroup = {
+  href: string;
+  iconKey: string;
+  label: string;
+  mLabel: string;
+  members: string[];
+  exact?: boolean;
+};
 
-const mobileLinks = [
-  { href: "/", label: "Acc." },
-  { href: "/planning", label: "Plan." },
-  { href: "/menu", label: "Menu" },
-  { href: "/recettes", label: "Recettes" },
-  { href: "/liste", label: "Liste" },
-  { href: "/inventaire", label: "Stock" },
+const groups: NavGroup[] = [
+  { href: "/", iconKey: "/", label: "Accueil", mLabel: "Acc.", members: ["/"], exact: true },
+  { href: "/planning", iconKey: "/menu", label: "Repas", mLabel: "Repas", members: ["/planning", "/menu", "/recettes"] },
+  { href: "/liste", iconKey: "/courses", label: "Courses", mLabel: "Courses", members: ["/liste", "/courses", "/inventaire", "/ingredients"] },
+  { href: "/suivi", iconKey: "/suivi", label: "Suivi", mLabel: "Suivi", members: ["/suivi"] },
 ];
 
 export function Nav() {
   const pathname = usePathname();
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = (group: NavGroup) =>
+    group.exact
+      ? pathname === "/"
+      : group.members.some((m) => pathname === m || pathname.startsWith(m));
 
   return (
     <>
@@ -124,20 +125,20 @@ export function Nav() {
               <Logo size={22} />
             </Link>
             <div className="flex gap-1 items-center">
-              {desktopLinks.map((link) => {
-                const active = isActive(link.href);
+              {groups.map((group) => {
+                const active = isActive(group);
                 return (
                   <Link
-                    key={link.href}
-                    href={link.href}
+                    key={group.href}
+                    href={group.href}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full transition-colors"
                     style={{
                       background: active ? "var(--color-ink)" : "transparent",
                       color: active ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
                     }}
                   >
-                    <NavIcon href={link.href} size={15} />
-                    {link.label}
+                    <NavIcon href={group.iconKey} size={15} />
+                    {group.label}
                   </Link>
                 );
               })}
@@ -155,28 +156,28 @@ export function Nav() {
           boxShadow: "0 -2px 8px rgba(31,26,20,0.04)",
         }}
       >
-        <div className="flex items-center justify-around h-16 px-1 pb-1">
-          {mobileLinks.map((link) => {
-            const active = isActive(link.href);
+        <div className="flex items-center justify-around h-16 px-2 pb-1">
+          {groups.map((group) => {
+            const active = isActive(group);
             const accent = active ? "var(--color-terracotta)" : "var(--color-ink-mute)";
             return (
               <Link
-                key={link.href}
-                href={link.href}
-                className="flex flex-col items-center justify-center gap-1 px-0.5 py-1 min-w-0 flex-1"
+                key={group.href}
+                href={group.href}
+                className="flex flex-col items-center justify-center gap-1 px-1 py-1 min-w-0 flex-1"
                 style={{ color: accent }}
               >
-                <NavIcon href={link.href} size={19} />
+                <NavIcon href={group.iconKey} size={21} />
                 <span
                   className="truncate max-w-full"
                   style={{
-                    fontSize: 9,
+                    fontSize: 10,
                     letterSpacing: "0.01em",
                     fontFamily: "var(--font-geist-sans)",
                     fontWeight: 400,
                   }}
                 >
-                  {link.label}
+                  {group.mLabel}
                 </span>
               </Link>
             );

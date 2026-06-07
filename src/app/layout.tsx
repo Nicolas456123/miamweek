@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
+import { SubNav } from "@/components/sub-nav";
 import { Providers } from "@/components/providers";
 import { PageTransition } from "@/components/page-transition";
 import { ServiceWorkerRegister } from "@/components/sw-register";
@@ -49,6 +50,7 @@ export default function RootLayout({
           <ServiceWorkerRegister />
           <Nav />
           <main className="flex-1 max-w-6xl mx-auto w-full px-4 pt-6 pb-24 md:pt-4 md:pb-4 min-h-0">
+            <SubNav />
             <PageTransition>{children}</PageTransition>
           </main>
         </Providers>

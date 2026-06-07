@@ -4,6 +4,8 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    // Plat déjà préparé / acheté tout fait (ex : lasagnes du commerce)
+    try { await query("ALTER TABLE recipes ADD COLUMN is_prepared INTEGER DEFAULT 0"); } catch { /* exists */ }
     // Single query with JOIN instead of N+1
     const recipesResult = await query("SELECT * FROM recipes ORDER BY is_favorite DESC, name ASC");
     const allIngredients = await query("SELECT * FROM recipe_ingredients");
@@ -39,15 +41,18 @@ export async function POST(request: Request) {
       return Response.json({ error: "Name is required" }, { status: 400 });
     }
 
-    const { prepTime, cookTime, difficulty, utensils, steps } = body;
+    const { prepTime, cookTime, difficulty, utensils, steps, isPrepared } = body;
+
+    try { await query("ALTER TABLE recipes ADD COLUMN is_prepared INTEGER DEFAULT 0"); } catch { /* exists */ }
 
     const recipeResult = await query(
-      "INSERT INTO recipes (name, description, servings, category, prep_time, cook_time, difficulty, utensils, steps) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      "INSERT INTO recipes (name, description, servings, category, prep_time, cook_time, difficulty, utensils, steps, is_prepared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
       [
         name, description || null, servings || null, category || null,
         prepTime || null, cookTime || null, difficulty || null,
         utensils ? JSON.stringify(utensils) : null,
         steps ? JSON.stringify(steps) : null,
+        isPrepared ? 1 : 0,
       ]
     );
     const newRecipe = recipeResult.rows[0];

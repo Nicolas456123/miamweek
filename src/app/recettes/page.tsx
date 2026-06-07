@@ -37,6 +37,7 @@ type Recipe = {
   steps: string | null;
   ingredients: Ingredient[];
   is_favorite?: number | null;
+  is_prepared?: number | null;
   photo_url?: string | null;
   photo_credit?: string | null;
 };
@@ -80,6 +81,7 @@ export default function RecettesPage() {
     prepTime: 0,
     cookTime: 0,
     difficulty: "facile",
+    isPrepared: false,
     utensils: [""],
     steps: [""],
     ingredients: [{ name: "", quantity: null as number | null, unit: "", category: "" }],
@@ -148,6 +150,7 @@ export default function RecettesPage() {
       prepTime: 0,
       cookTime: 0,
       difficulty: "facile",
+      isPrepared: false,
       utensils: [""],
       steps: [""],
       ingredients: [{ name: "", quantity: null, unit: "", category: "" }],
@@ -202,6 +205,7 @@ export default function RecettesPage() {
       prepTime: recipe.prep_time || 0,
       cookTime: recipe.cook_time || 0,
       difficulty: recipe.difficulty || "facile",
+      isPrepared: !!recipe.is_prepared,
       utensils: utensils.length > 0 ? utensils : [""],
       steps: steps.length > 0 ? steps : [""],
       ingredients:
@@ -240,6 +244,7 @@ export default function RecettesPage() {
           prepTime: recipe.prepTime || 0,
           cookTime: recipe.cookTime || 0,
           difficulty: recipe.difficulty || "facile",
+          isPrepared: false,
           utensils: recipe.utensils || [""],
           steps: recipe.steps || [""],
           ingredients:
@@ -262,6 +267,25 @@ export default function RecettesPage() {
   };
 
   const addAllToList = async (recipe: Recipe) => {
+    // Plat déjà préparé : on ajoute le plat lui-même, pas ses ingrédients.
+    if (recipe.is_prepared) {
+      await fetch("/api/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName: recipe.name,
+          quantity: 1,
+          unit: "pcs",
+          category: "Surgelés",
+          source: "recipe",
+          listStatus: "prep",
+          sourceRecipe: recipe.name,
+        }),
+      });
+      setAddedToList((prev) => new Set(prev).add(recipe.id));
+      toast(`« ${recipe.name} » ajouté (plat déjà préparé).`);
+      return;
+    }
     let inventoryNames: string[] = [];
     try {
       const invRes = await fetch("/api/stock");
@@ -514,6 +538,24 @@ export default function RecettesPage() {
               </select>
             </label>
           </div>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.isPrepared}
+              onChange={(e) => setForm({ ...form, isPrepared: e.target.checked })}
+              className="w-4 h-4 accent-[var(--color-terracotta)]"
+            />
+            <span className="text-sm" style={{ color: "var(--color-ink-soft)" }}>
+              Plat déjà préparé / acheté tout fait (ex : lasagnes du commerce)
+            </span>
+          </label>
+          {form.isPrepared && (
+            <p className="text-xs" style={{ color: "var(--color-ink-mute)" }}>
+              Lors de l&apos;ajout à la liste, ce plat sera ajouté comme un seul article
+              (le plat lui-même) plutôt que ses ingrédients.
+            </p>
+          )}
 
           <div>
             <span className="eyebrow block mb-2">Ustensiles</span>
@@ -776,6 +818,7 @@ export default function RecettesPage() {
                   )}
 
                   <div className="flex flex-wrap gap-1.5 mb-3">
+                    {!!recipe.is_prepared && <Chip tone="mustard">🛒 déjà préparé</Chip>}
                     {antiGaspiCount(recipe) > 0 && (
                       <Chip tone="olive">🌱 anti-gaspi · {antiGaspiCount(recipe)}</Chip>
                     )}

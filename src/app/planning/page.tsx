@@ -214,6 +214,17 @@ export default function PlanningPage() {
     );
     const toAdd: { productName: string; quantity: number; unit: string; category: string; sourceRecipe: string }[] = [];
     for (const recipe of recipeResponses) {
+      // Plat déjà préparé : ajouter le plat lui-même, pas ses ingrédients.
+      if (recipe.is_prepared) {
+        toAdd.push({
+          productName: recipe.name,
+          quantity: 1,
+          unit: "pcs",
+          category: "Surgelés",
+          sourceRecipe: recipe.name,
+        });
+        continue;
+      }
       if (!recipe.ingredients) continue;
       for (const ing of recipe.ingredients) {
         toAdd.push({

@@ -11,6 +11,7 @@ type Recipe = {
   description: string | null;
   servings: number;
   category: string | null;
+  is_prepared?: number | null;
   ingredients: { name: string; quantity: number | null; unit: string | null; category: string | null }[];
 };
 
@@ -69,6 +70,24 @@ export default function MenuPage() {
     // quantité affichée = quantité de la recette / portions recette × personnes.
     const baseServings = selectedPlat.servings && selectedPlat.servings > 0 ? selectedPlat.servings : 2;
     const factor = persons / baseServings;
+    // Plat déjà préparé : ajouter le plat lui-même, pas ses ingrédients.
+    if (selectedPlat.is_prepared) {
+      await fetch("/api/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName: selectedPlat.name,
+          quantity: 1,
+          unit: "pcs",
+          category: "Surgelés",
+          source: "recipe",
+          listStatus: "prep",
+          sourceRecipe: menuLabel,
+        }),
+      });
+      toast("Plat déjà préparé ajouté à la liste.");
+      return;
+    }
     for (const ing of selectedPlat.ingredients) {
       const scaledQty =
         ing.quantity != null ? Math.round(ing.quantity * factor * 100) / 100 : 1;

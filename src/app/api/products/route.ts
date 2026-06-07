@@ -4,6 +4,14 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    // Valeurs standard optionnelles (durée de conservation, après ouverture)
+    for (const col of [
+      "ALTER TABLE products ADD COLUMN default_shelf_life_days INTEGER",
+      "ALTER TABLE products ADD COLUMN default_shelf_life_after_open_days INTEGER",
+    ]) {
+      try { await query(col); } catch { /* already exists */ }
+    }
+
     const result = await query(
       "SELECT * FROM products ORDER BY category ASC, COALESCE(sort_order, 100) ASC, name ASC"
     );
@@ -21,7 +29,15 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, category, defaultUnit, defaultQuantity, icon } = body;
+    const {
+      name,
+      category,
+      defaultUnit,
+      defaultQuantity,
+      icon,
+      defaultShelfLifeDays,
+      defaultShelfLifeAfterOpenDays,
+    } = body;
 
     if (!name || !category || !defaultUnit) {
       return Response.json(
@@ -30,9 +46,25 @@ export async function POST(request: Request) {
       );
     }
 
+    for (const col of [
+      "ALTER TABLE products ADD COLUMN default_shelf_life_days INTEGER",
+      "ALTER TABLE products ADD COLUMN default_shelf_life_after_open_days INTEGER",
+    ]) {
+      try { await query(col); } catch { /* already exists */ }
+    }
+
     const result = await query(
-      "INSERT INTO products (name, category, default_unit, default_quantity, icon, is_custom) VALUES (?, ?, ?, ?, ?, ?) RETURNING *",
-      [name, category, defaultUnit, defaultQuantity ?? 1, icon || null, 1]
+      "INSERT INTO products (name, category, default_unit, default_quantity, icon, is_custom, default_shelf_life_days, default_shelf_life_after_open_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      [
+        name,
+        category,
+        defaultUnit,
+        defaultQuantity ?? 1,
+        icon || null,
+        1,
+        defaultShelfLifeDays ?? null,
+        defaultShelfLifeAfterOpenDays ?? null,
+      ]
     );
 
     return Response.json(result.rows[0], { status: 201 });
@@ -55,6 +87,8 @@ export async function PUT(request: Request) {
       defaultUnit,
       defaultQuantity,
       icon,
+      defaultShelfLifeDays,
+      defaultShelfLifeAfterOpenDays,
       kcalPer100,
       proteinPer100,
       carbsPer100,
@@ -74,6 +108,8 @@ export async function PUT(request: Request) {
       defaultUnit: "default_unit",
       defaultQuantity: "default_quantity",
       icon: "icon",
+      defaultShelfLifeDays: "default_shelf_life_days",
+      defaultShelfLifeAfterOpenDays: "default_shelf_life_after_open_days",
       kcalPer100: "kcal_per_100",
       proteinPer100: "protein_per_100",
       carbsPer100: "carbs_per_100",
@@ -89,6 +125,8 @@ export async function PUT(request: Request) {
       defaultUnit,
       defaultQuantity,
       icon,
+      defaultShelfLifeDays,
+      defaultShelfLifeAfterOpenDays,
       kcalPer100,
       proteinPer100,
       carbsPer100,

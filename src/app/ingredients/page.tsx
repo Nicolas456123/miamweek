@@ -18,6 +18,8 @@ type Product = {
   default_quantity: number | null;
   icon: string | null;
   is_custom: number | boolean | null;
+  default_shelf_life_days: number | null;
+  default_shelf_life_after_open_days: number | null;
 };
 
 const ALL_CATEGORIES = [...PRODUCT_CATEGORIES, "Autre"];
@@ -28,6 +30,8 @@ type Draft = {
   defaultUnit: string;
   defaultQuantity: string;
   icon: string;
+  shelfLifeDays: string;
+  shelfLifeAfterOpen: string;
 };
 
 const emptyDraft: Draft = {
@@ -36,6 +40,8 @@ const emptyDraft: Draft = {
   defaultUnit: "pcs",
   defaultQuantity: "1",
   icon: "",
+  shelfLifeDays: "",
+  shelfLifeAfterOpen: "",
 };
 
 export default function IngredientsPage() {
@@ -104,6 +110,9 @@ export default function IngredientsPage() {
       defaultUnit: p.default_unit || "pcs",
       defaultQuantity: p.default_quantity != null ? String(p.default_quantity) : "1",
       icon: p.icon || "",
+      shelfLifeDays: p.default_shelf_life_days != null ? String(p.default_shelf_life_days) : "",
+      shelfLifeAfterOpen:
+        p.default_shelf_life_after_open_days != null ? String(p.default_shelf_life_after_open_days) : "",
     });
   };
 
@@ -116,6 +125,8 @@ export default function IngredientsPage() {
       defaultUnit: editDraft.defaultUnit,
       defaultQuantity: editDraft.defaultQuantity ? Number(editDraft.defaultQuantity) : 1,
       icon: editDraft.icon.trim() || null,
+      defaultShelfLifeDays: editDraft.shelfLifeDays ? Number(editDraft.shelfLifeDays) : null,
+      defaultShelfLifeAfterOpenDays: editDraft.shelfLifeAfterOpen ? Number(editDraft.shelfLifeAfterOpen) : null,
     };
     setProducts((prev) =>
       prev.map((p) =>
@@ -127,6 +138,8 @@ export default function IngredientsPage() {
               default_unit: payload.defaultUnit,
               default_quantity: payload.defaultQuantity,
               icon: payload.icon,
+              default_shelf_life_days: payload.defaultShelfLifeDays,
+              default_shelf_life_after_open_days: payload.defaultShelfLifeAfterOpenDays,
             }
           : p
       )
@@ -170,6 +183,8 @@ export default function IngredientsPage() {
       defaultUnit: addDraft.defaultUnit,
       defaultQuantity: addDraft.defaultQuantity ? Number(addDraft.defaultQuantity) : 1,
       icon: addDraft.icon.trim() || null,
+      defaultShelfLifeDays: addDraft.shelfLifeDays ? Number(addDraft.shelfLifeDays) : null,
+      defaultShelfLifeAfterOpenDays: addDraft.shelfLifeAfterOpen ? Number(addDraft.shelfLifeAfterOpen) : null,
     };
     try {
       const res = await fetch("/api/products", {
@@ -252,6 +267,32 @@ export default function IngredientsPage() {
         maxLength={4}
         className={`${inputCls} text-center`}
       />
+      <label className="col-span-2 md:col-span-3 flex items-center gap-2">
+        <span className="eyebrow shrink-0">Conservation (j)</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={draft.shelfLifeDays}
+          onChange={(e) => set({ ...draft, shelfLifeDays: e.target.value })}
+          placeholder="ex : 7"
+          aria-label="Durée de conservation standard en jours"
+          className={`${inputCls} tnum w-full min-w-0`}
+          min={0}
+        />
+      </label>
+      <label className="col-span-2 md:col-span-3 flex items-center gap-2">
+        <span className="eyebrow shrink-0">Après ouverture (j)</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={draft.shelfLifeAfterOpen}
+          onChange={(e) => set({ ...draft, shelfLifeAfterOpen: e.target.value })}
+          placeholder="ex : 5"
+          aria-label="Durée max après ouverture en jours"
+          className={`${inputCls} tnum w-full min-w-0`}
+          min={0}
+        />
+      </label>
     </div>
   );
 
@@ -468,6 +509,8 @@ export default function IngredientsPage() {
                         style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
                       >
                         défaut · {formatQuantity(p.default_quantity ?? 1, p.default_unit)}
+                        {p.default_shelf_life_days != null ? ` · conserv. ${p.default_shelf_life_days} j` : ""}
+                        {p.default_shelf_life_after_open_days != null ? ` · ouvert ${p.default_shelf_life_after_open_days} j` : ""}
                       </p>
                     </div>
                     <button

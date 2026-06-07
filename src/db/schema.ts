@@ -64,6 +64,9 @@ export const products = sqliteTable("products", {
   // Emballage par défaut (taille typique en g/ml)
   defaultPackageSize: real("default_package_size"),
   defaultBrand: text("default_brand"),
+  // Conservation standard (jours)
+  defaultShelfLifeDays: integer("default_shelf_life_days"), // durée typique avant péremption
+  defaultShelfLifeAfterOpenDays: integer("default_shelf_life_after_open_days"), // max après ouverture
 });
 
 // ── Shopping list items (2-phase: prep -> active -> done) ─────────────

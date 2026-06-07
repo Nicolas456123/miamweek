@@ -105,8 +105,40 @@ export default function PlanningPage() {
     }
   }, [mealConfigs]);
 
+  // Charge les réglages par jour depuis la base (source de vérité).
+  useEffect(() => {
+    fetch("/api/meal-config")
+      .then((r) => r.json())
+      .then((rows) => {
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        const map: Record<string, MealConfig> = {};
+        for (const row of rows) {
+          map[`${row.day_of_week}_${row.meal}`] = {
+            mode: row.mode === "skip" ? "skip" : "cook",
+            persons: row.persons ?? 2,
+          };
+        }
+        setMealConfigs((prev) => ({ ...prev, ...map }));
+      })
+      .catch(() => {});
+  }, []);
+
   const getMealConfig = (day: number, meal: "lunch" | "dinner"): MealConfig =>
     mealConfigs[`${day}_${meal}`] || (meal === "lunch" ? DEFAULT_LUNCH : DEFAULT_DINNER);
+
+  const updateMealConfig = (
+    day: number,
+    meal: "lunch" | "dinner",
+    patch: Partial<MealConfig>
+  ) => {
+    const next = { ...getMealConfig(day, meal), ...patch };
+    setMealConfigs((prev) => ({ ...prev, [`${day}_${meal}`]: next }));
+    fetch("/api/meal-config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dayOfWeek: day, meal, mode: next.mode, persons: next.persons }),
+    }).catch(() => {});
+  };
 
   const fetchMeals = useCallback(() => {
     if (!currentMonday) return;
@@ -517,19 +549,43 @@ export default function PlanningPage() {
 
     return (
       <div className="px-3 pb-3 pt-1.5">
-        <div className="flex items-baseline justify-between mb-1">
-          <span
+        <div className="flex items-center justify-between mb-1">
+          <button
+            onClick={() =>
+              updateMealConfig(day.dayOfWeek, period, {
+                mode: config.mode === "cook" ? "skip" : "cook",
+              })
+            }
             className="font-mono text-[10px] uppercase"
             style={{ color: "var(--color-ink-mute)", letterSpacing: "0.08em" }}
+            title={config.mode === "cook" ? "Cuisiner ce repas — cliquer pour sauter" : "Repas sauté — cliquer pour cuisiner"}
           >
             {period === "lunch" ? "midi" : "soir"}
-          </span>
+            <span style={{ color: config.mode === "cook" ? "var(--color-olive-deep)" : "var(--color-ink-faint)" }}>
+              {" "}· {config.mode === "cook" ? "cuisine" : "sauté"}
+            </span>
+          </button>
           {config.mode === "cook" && (
-            <span
-              className="font-mono text-[10px]"
-              style={{ color: "var(--color-ink-faint)", letterSpacing: "0.04em" }}
-            >
-              +{config.persons}
+            <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: "var(--color-ink-faint)" }}>
+              <button
+                onClick={() =>
+                  updateMealConfig(day.dayOfWeek, period, { persons: Math.max(1, config.persons - 1) })
+                }
+                aria-label="Moins de personnes"
+                className="w-4 leading-none"
+              >
+                −
+              </button>
+              <span style={{ minWidth: 14, textAlign: "center" }}>+{config.persons}</span>
+              <button
+                onClick={() =>
+                  updateMealConfig(day.dayOfWeek, period, { persons: config.persons + 1 })
+                }
+                aria-label="Plus de personnes"
+                className="w-4 leading-none"
+              >
+                +
+              </button>
             </span>
           )}
         </div>

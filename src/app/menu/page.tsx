@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { matchSearch, formatQuantity } from "@/lib/utils";
 
@@ -285,56 +286,71 @@ export default function MenuPage() {
               const active = selectedPlat?.id === r.id;
               const tone = TONES[idx % TONES.length];
               return (
-                <button
+                <div
                   key={r.id}
-                  onClick={() => {
-                    setSelectedPlat(r);
-                    setSuggestions(null);
-                  }}
-                  className="group flex flex-col text-left transition-colors"
+                  className="group flex flex-col transition-colors"
                   style={{
                     background: active ? "var(--color-cream-deep)" : "var(--color-cream-pale)",
                     outline: active ? "2px solid var(--color-terracotta)" : "none",
                     outlineOffset: -2,
                   }}
                 >
-                  <div className={`placeholder-img placeholder-img-${tone} aspect-[4/3] relative`}>
-                    {r.name.slice(0, 20)}
-                    {active && (
-                      <span
-                        className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
-                        style={{ background: "var(--color-terracotta)", color: "var(--color-cream-pale)" }}
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-3 flex-1 flex flex-col gap-1.5">
-                    <p
-                      className="font-display leading-tight tracking-tight"
-                      style={{ fontSize: 18, color: "var(--color-ink)" }}
-                    >
-                      {r.name}
-                    </p>
-                    {r.category && (
-                      <div className="flex flex-wrap items-center gap-1.5 mt-auto">
+                  <button
+                    onClick={() => {
+                      setSelectedPlat(r);
+                      setSuggestions(null);
+                    }}
+                    className="flex flex-col text-left"
+                    title="Choisir ce plat"
+                  >
+                    <div className={`placeholder-img placeholder-img-${tone} aspect-[4/3] relative`}>
+                      {r.name.slice(0, 20)}
+                      {active && (
                         <span
-                          className="font-mono text-[9px] uppercase rounded-full px-2 py-0.5"
-                          style={{
-                            background: "var(--color-cream-deep)",
-                            color: "var(--color-ink-soft)",
-                            border: "1px solid var(--color-line)",
-                            letterSpacing: "0.06em",
-                          }}
+                          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                          style={{ background: "var(--color-terracotta)", color: "var(--color-cream-pale)" }}
                         >
-                          {r.category}
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
                         </span>
-                      </div>
+                      )}
+                    </div>
+                    <div className="px-3 pt-3">
+                      <p
+                        className="font-display leading-tight tracking-tight"
+                        style={{ fontSize: 18, color: "var(--color-ink)" }}
+                      >
+                        {r.name}
+                      </p>
+                    </div>
+                  </button>
+                  <div className="px-3 pb-3 pt-1.5 mt-auto flex items-center justify-between gap-2">
+                    {r.category ? (
+                      <span
+                        className="font-mono text-[9px] uppercase rounded-full px-2 py-0.5"
+                        style={{
+                          background: "var(--color-cream-deep)",
+                          color: "var(--color-ink-soft)",
+                          border: "1px solid var(--color-line)",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        {r.category}
+                      </span>
+                    ) : (
+                      <span />
                     )}
+                    <Link
+                      href={`/recettes/${r.id}`}
+                      className="font-mono text-[10px] hover:underline shrink-0"
+                      style={{ color: "var(--color-terracotta-deep)", letterSpacing: "0.04em" }}
+                      title="Voir le détail de la recette"
+                    >
+                      détails →
+                    </Link>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

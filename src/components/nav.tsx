@@ -99,6 +99,7 @@ const mobileLinks = [
   { href: "/", label: "Acc." },
   { href: "/planning", label: "Plan." },
   { href: "/menu", label: "Menu" },
+  { href: "/recettes", label: "Recettes" },
   { href: "/liste", label: "Liste" },
   { href: "/courses", label: "Courses" },
   { href: "/inventaire", label: "Stock" },
@@ -157,7 +158,7 @@ export function Nav() {
           boxShadow: "0 -2px 8px rgba(31,26,20,0.04)",
         }}
       >
-        <div className="flex items-center justify-around h-16 px-2 pb-1">
+        <div className="flex items-center justify-around h-16 px-1 pb-1">
           {mobileLinks.map((link) => {
             const active = isActive(link.href);
             const accent = active ? "var(--color-terracotta)" : "var(--color-ink-mute)";
@@ -165,14 +166,15 @@ export function Nav() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="flex flex-col items-center justify-center gap-1 px-1 py-1 min-w-0"
+                className="flex flex-col items-center justify-center gap-1 px-0.5 py-1 min-w-0 flex-1"
                 style={{ color: accent }}
               >
-                <NavIcon href={link.href} size={20} />
+                <NavIcon href={link.href} size={19} />
                 <span
+                  className="truncate max-w-full"
                   style={{
-                    fontSize: 10,
-                    letterSpacing: "0.02em",
+                    fontSize: 9,
+                    letterSpacing: "0.01em",
                     fontFamily: "var(--font-geist-sans)",
                     fontWeight: 400,
                   }}

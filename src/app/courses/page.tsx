@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icons";
-import { formatQuantity } from "@/lib/utils";
+import { formatQuantity, estimatePrice } from "@/lib/utils";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 import { useToast } from "@/components/toast";
 import {
@@ -145,6 +145,18 @@ export default function CoursesPage() {
   const checkedCount = items.filter((i) => !!i.checked).length;
   const totalCount = items.length;
   const progress = totalCount > 0 ? (checkedCount / totalCount) * 100 : 0;
+  const totalEstimated = useMemo(
+    () => items.reduce((acc, it) => acc + estimatePrice(it.quantity, it.unit), 0),
+    [items]
+  );
+  const takenEstimated = useMemo(
+    () =>
+      items
+        .filter((it) => !!it.checked)
+        .reduce((acc, it) => acc + estimatePrice(it.quantity, it.unit), 0),
+    [items]
+  );
+  const fmtEUR = (n: number) => n.toFixed(2).replace(".", ",") + " €";
 
   if (totalCount === 0) {
     return (
@@ -243,9 +255,21 @@ export default function CoursesPage() {
             {String(checkedCount).padStart(2, "0")}
             <span style={{ color: "var(--color-ink-faint)" }}> / {String(totalCount).padStart(2, "0")}</span>
           </span>
-          <span className="font-mono text-xs tnum" style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}>
-            {Math.round(progress)}%
-          </span>
+          <div className="text-right">
+            <span
+              className="font-display tnum block leading-none"
+              style={{ fontSize: 22, color: "var(--color-terracotta)", fontStyle: "italic" }}
+            >
+              {fmtEUR(totalEstimated)}
+            </span>
+            <span
+              className="font-mono text-[10px] tnum block mt-1"
+              style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
+            >
+              {takenEstimated > 0 ? `${fmtEUR(takenEstimated)} pris · ` : ""}
+              {Math.round(progress)}%
+            </span>
+          </div>
         </div>
         <div
           className="w-full h-1 rounded-full overflow-hidden"
@@ -260,6 +284,12 @@ export default function CoursesPage() {
             }}
           />
         </div>
+        <p
+          className="font-mono text-[10px] mt-2"
+          style={{ color: "var(--color-ink-faint)", letterSpacing: "0.04em" }}
+        >
+          panier estimé · prix indicatifs
+        </p>
         {progress === 100 && (
           <p
             className="text-sm font-medium mt-3 text-center font-display"

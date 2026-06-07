@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
-import { matchSearch, formatQuantity, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
+import { rankedFilter, formatQuantity, estimatePrice, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -200,17 +200,6 @@ export default function ListePage() {
     setShowAdd(false);
   };
 
-  const toggleCheck = (item: ListItem) => {
-    const next = !item.checked;
-    setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, checked: next ? 1 : 0 } : it)));
-    offlineFetch("/api/list", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: item.id, checked: next }),
-      offlineOptimistic: true,
-    }).catch(() => {});
-  };
-
   const updateQty = (item: ListItem, delta: number) => {
     const step = getStep(item.unit || "pcs") * delta;
     const newQty = Math.max(0, (item.quantity || 0) + step);
@@ -271,9 +260,8 @@ export default function ListePage() {
   }, [visibleItems]);
 
   // Stats
-  const checkedCount = items.filter((i) => !!i.checked).length;
   const totalCount = items.length;
-  const totalEstimated = items.reduce((acc, it) => acc + (it.quantity || 1) * 1.8, 0);
+  const totalEstimated = items.reduce((acc, it) => acc + estimatePrice(it.quantity, it.unit), 0);
   const recipeSources = useMemo(() => {
     const set = new Set<string>();
     for (const it of items) if (it.source_recipe) set.add(it.source_recipe);
@@ -282,9 +270,7 @@ export default function ListePage() {
 
   const filteredProducts = useMemo(() => {
     if (!productSearch) return [];
-    return products
-      .filter((p) => matchSearch(productSearch, p.name, p.category))
-      .slice(0, 12);
+    return rankedFilter(products, productSearch, (p) => [p.name, p.category]).slice(0, 12);
   }, [products, productSearch]);
 
   // Title — nN articles, un panier
@@ -350,18 +336,12 @@ export default function ListePage() {
           </span>
         </h1>
 
-        <div className="grid grid-cols-3 gap-6 md:gap-8 shrink-0">
+        <div className="grid grid-cols-2 gap-6 md:gap-8 shrink-0">
           <div className="text-right">
             <p className="font-display tnum leading-none" style={{ fontSize: 36, color: "var(--color-ink)" }}>
               {String(totalCount).padStart(2, "0")}
             </p>
             <p className="eyebrow mt-1.5">à acheter</p>
-          </div>
-          <div className="text-right">
-            <p className="font-display tnum leading-none" style={{ fontSize: 36, color: "var(--color-ink)" }}>
-              {String(checkedCount).padStart(2, "0")}
-            </p>
-            <p className="eyebrow mt-1.5">cochés</p>
           </div>
           <div className="text-right">
             <p
@@ -592,28 +572,16 @@ export default function ListePage() {
                   className="flex items-center gap-3 px-1 py-3"
                   style={{ background: "var(--color-cream)" }}
                 >
-                  <button
-                    onClick={() => toggleCheck(it)}
-                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors"
-                    style={{
-                      background: it.checked ? "var(--color-terracotta)" : "transparent",
-                      border: `1.5px solid ${it.checked ? "var(--color-terracotta)" : "var(--color-line)"}`,
-                      color: "var(--color-cream-pale)",
-                    }}
-                  >
-                    {!!it.checked && (
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className={`flex-1 min-w-0 ${it.checked ? "opacity-50" : ""}`}>
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: "var(--color-line)" }}
+                  />
+                  <div className="flex-1 min-w-0">
                     <p
                       className="text-sm leading-tight truncate"
                       style={{
                         color: "var(--color-ink)",
                         fontWeight: 500,
-                        textDecoration: it.checked ? "line-through" : "none",
                       }}
                     >
                       {it.product_name}

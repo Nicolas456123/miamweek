@@ -10,7 +10,7 @@ import {
   PageHeader,
   SectionTitle,
 } from "@/components/ui-kit";
-import { matchSearch } from "@/lib/utils";
+import { rankedFilter } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -117,9 +117,11 @@ export default function PreferencesPage() {
 
   const filteredProducts = useMemo(() => {
     if (!search) return [];
-    return products
-      .filter((p) => matchSearch(search, p.name, p.category) && !prefProductNames.has(p.name))
-      .slice(0, 12);
+    return rankedFilter(
+      products.filter((p) => !prefProductNames.has(p.name)),
+      search,
+      (p) => [p.name, p.category]
+    ).slice(0, 12);
   }, [products, search, prefProductNames]);
 
   const filteredPreferences = useMemo(() => {

@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, category, defaultUnit, icon } = body;
+    const { name, category, defaultUnit, defaultQuantity, icon } = body;
 
     if (!name || !category || !defaultUnit) {
       return Response.json(
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
     }
 
     const result = await query(
-      "INSERT INTO products (name, category, default_unit, icon, is_custom) VALUES (?, ?, ?, ?, ?) RETURNING *",
-      [name, category, defaultUnit, icon || null, 1]
+      "INSERT INTO products (name, category, default_unit, default_quantity, icon, is_custom) VALUES (?, ?, ?, ?, ?, ?) RETURNING *",
+      [name, category, defaultUnit, defaultQuantity ?? 1, icon || null, 1]
     );
 
     return Response.json(result.rows[0], { status: 201 });
@@ -50,6 +50,11 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const {
       id,
+      name,
+      category,
+      defaultUnit,
+      defaultQuantity,
+      icon,
       kcalPer100,
       proteinPer100,
       carbsPer100,
@@ -64,6 +69,11 @@ export async function PUT(request: Request) {
     }
 
     const fields: Record<string, string> = {
+      name: "name",
+      category: "category",
+      defaultUnit: "default_unit",
+      defaultQuantity: "default_quantity",
+      icon: "icon",
       kcalPer100: "kcal_per_100",
       proteinPer100: "protein_per_100",
       carbsPer100: "carbs_per_100",
@@ -74,6 +84,11 @@ export async function PUT(request: Request) {
     };
 
     const values: Record<string, unknown> = {
+      name,
+      category,
+      defaultUnit,
+      defaultQuantity,
+      icon,
       kcalPer100,
       proteinPer100,
       carbsPer100,
@@ -104,6 +119,26 @@ export async function PUT(request: Request) {
     console.error("Failed to update product:", error);
     return Response.json(
       { error: "Failed to update product" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    const { id } = body;
+
+    if (!id) {
+      return Response.json({ error: "id is required" }, { status: 400 });
+    }
+
+    await query("DELETE FROM products WHERE id = ?", [id]);
+    return Response.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to delete product:", error);
+    return Response.json(
+      { error: "Failed to delete product" },
       { status: 500 }
     );
   }

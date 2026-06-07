@@ -20,6 +20,7 @@ type Product = {
   is_custom: number | boolean | null;
   default_shelf_life_days: number | null;
   default_shelf_life_after_open_days: number | null;
+  price: number | null;
 };
 
 const ALL_CATEGORIES = [...PRODUCT_CATEGORIES, "Autre"];
@@ -32,6 +33,7 @@ type Draft = {
   icon: string;
   shelfLifeDays: string;
   shelfLifeAfterOpen: string;
+  price: string;
 };
 
 const emptyDraft: Draft = {
@@ -42,6 +44,7 @@ const emptyDraft: Draft = {
   icon: "",
   shelfLifeDays: "",
   shelfLifeAfterOpen: "",
+  price: "",
 };
 
 export default function IngredientsPage() {
@@ -113,6 +116,7 @@ export default function IngredientsPage() {
       shelfLifeDays: p.default_shelf_life_days != null ? String(p.default_shelf_life_days) : "",
       shelfLifeAfterOpen:
         p.default_shelf_life_after_open_days != null ? String(p.default_shelf_life_after_open_days) : "",
+      price: p.price != null ? String(p.price) : "",
     });
   };
 
@@ -127,6 +131,7 @@ export default function IngredientsPage() {
       icon: editDraft.icon.trim() || null,
       defaultShelfLifeDays: editDraft.shelfLifeDays ? Number(editDraft.shelfLifeDays) : null,
       defaultShelfLifeAfterOpenDays: editDraft.shelfLifeAfterOpen ? Number(editDraft.shelfLifeAfterOpen) : null,
+      price: editDraft.price ? Number(editDraft.price.replace(",", ".")) : null,
     };
     setProducts((prev) =>
       prev.map((p) =>
@@ -140,6 +145,7 @@ export default function IngredientsPage() {
               icon: payload.icon,
               default_shelf_life_days: payload.defaultShelfLifeDays,
               default_shelf_life_after_open_days: payload.defaultShelfLifeAfterOpenDays,
+              price: payload.price,
             }
           : p
       )
@@ -185,6 +191,7 @@ export default function IngredientsPage() {
       icon: addDraft.icon.trim() || null,
       defaultShelfLifeDays: addDraft.shelfLifeDays ? Number(addDraft.shelfLifeDays) : null,
       defaultShelfLifeAfterOpenDays: addDraft.shelfLifeAfterOpen ? Number(addDraft.shelfLifeAfterOpen) : null,
+      price: addDraft.price ? Number(addDraft.price.replace(",", ".")) : null,
     };
     try {
       const res = await fetch("/api/products", {
@@ -291,6 +298,20 @@ export default function IngredientsPage() {
           aria-label="Durée max après ouverture en jours"
           className={`${inputCls} tnum w-full min-w-0`}
           min={0}
+        />
+      </label>
+      <label className="col-span-2 md:col-span-3 flex items-center gap-2">
+        <span className="eyebrow shrink-0">Prix indicatif (€)</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={draft.price}
+          onChange={(e) => set({ ...draft, price: e.target.value })}
+          placeholder="pour la qté par défaut"
+          aria-label="Prix indicatif en euros pour la quantité par défaut"
+          className={`${inputCls} tnum w-full min-w-0`}
+          min={0}
+          step="0.01"
         />
       </label>
     </div>
@@ -509,6 +530,7 @@ export default function IngredientsPage() {
                         style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
                       >
                         défaut · {formatQuantity(p.default_quantity ?? 1, p.default_unit)}
+                        {p.price != null ? ` · ${p.price.toFixed(2).replace(".", ",")} €` : ""}
                         {p.default_shelf_life_days != null ? ` · conserv. ${p.default_shelf_life_days} j` : ""}
                         {p.default_shelf_life_after_open_days != null ? ` · ouvert ${p.default_shelf_life_after_open_days} j` : ""}
                       </p>

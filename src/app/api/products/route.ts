@@ -8,6 +8,7 @@ export async function GET() {
     for (const col of [
       "ALTER TABLE products ADD COLUMN default_shelf_life_days INTEGER",
       "ALTER TABLE products ADD COLUMN default_shelf_life_after_open_days INTEGER",
+      "ALTER TABLE products ADD COLUMN price REAL",
     ]) {
       try { await query(col); } catch { /* already exists */ }
     }
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
       icon,
       defaultShelfLifeDays,
       defaultShelfLifeAfterOpenDays,
+      price,
     } = body;
 
     if (!name || !category || !defaultUnit) {
@@ -49,12 +51,13 @@ export async function POST(request: Request) {
     for (const col of [
       "ALTER TABLE products ADD COLUMN default_shelf_life_days INTEGER",
       "ALTER TABLE products ADD COLUMN default_shelf_life_after_open_days INTEGER",
+      "ALTER TABLE products ADD COLUMN price REAL",
     ]) {
       try { await query(col); } catch { /* already exists */ }
     }
 
     const result = await query(
-      "INSERT INTO products (name, category, default_unit, default_quantity, icon, is_custom, default_shelf_life_days, default_shelf_life_after_open_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      "INSERT INTO products (name, category, default_unit, default_quantity, icon, is_custom, default_shelf_life_days, default_shelf_life_after_open_days, price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
       [
         name,
         category,
@@ -64,6 +67,7 @@ export async function POST(request: Request) {
         1,
         defaultShelfLifeDays ?? null,
         defaultShelfLifeAfterOpenDays ?? null,
+        price ?? null,
       ]
     );
 
@@ -89,6 +93,7 @@ export async function PUT(request: Request) {
       icon,
       defaultShelfLifeDays,
       defaultShelfLifeAfterOpenDays,
+      price,
       kcalPer100,
       proteinPer100,
       carbsPer100,
@@ -110,6 +115,7 @@ export async function PUT(request: Request) {
       icon: "icon",
       defaultShelfLifeDays: "default_shelf_life_days",
       defaultShelfLifeAfterOpenDays: "default_shelf_life_after_open_days",
+      price: "price",
       kcalPer100: "kcal_per_100",
       proteinPer100: "protein_per_100",
       carbsPer100: "carbs_per_100",
@@ -127,6 +133,7 @@ export async function PUT(request: Request) {
       icon,
       defaultShelfLifeDays,
       defaultShelfLifeAfterOpenDays,
+      price,
       kcalPer100,
       proteinPer100,
       carbsPer100,

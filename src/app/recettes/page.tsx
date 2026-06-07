@@ -12,6 +12,7 @@ import {
   PageHeader,
 } from "@/components/ui-kit";
 import { RecipePhoto } from "@/components/recipe-photo";
+import { matchSearch, formatQuantity, UNITS } from "@/lib/utils";
 
 type Ingredient = {
   id?: number;
@@ -294,11 +295,12 @@ export default function RecettesPage() {
     if (filterFavorites && !r.is_favorite) return false;
     if (filterCategory && r.category !== filterCategory) return false;
     if (search) {
-      const s = search.toLowerCase();
-      return (
-        r.name.toLowerCase().includes(s) ||
-        r.description?.toLowerCase().includes(s) ||
-        r.ingredients.some((i) => i.name.toLowerCase().includes(s))
+      return matchSearch(
+        search,
+        r.name,
+        r.description,
+        r.category,
+        r.ingredients.map((i) => i.name).join(" ")
       );
     }
     return true;
@@ -530,17 +532,26 @@ export default function RecettesPage() {
                   placeholder="Qté"
                   className="w-16 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2 py-1.5 text-sm tnum focus:outline-none focus:border-[var(--color-terracotta)]"
                 />
-                <input
-                  type="text"
-                  value={ing.unit}
+                <select
+                  value={ing.unit || ""}
                   onChange={(e) => {
                     const u = [...form.ingredients];
                     u[i] = { ...u[i], unit: e.target.value };
                     setForm({ ...form, ingredients: u });
                   }}
-                  placeholder="Unité"
-                  className="w-20 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
-                />
+                  aria-label="Unité"
+                  className="w-24 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
+                >
+                  <option value="">unité</option>
+                  {ing.unit && !(UNITS as readonly string[]).includes(ing.unit) && (
+                    <option value={ing.unit}>{ing.unit}</option>
+                  )}
+                  {UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
                 <button
                   onClick={() =>
                     setForm({ ...form, ingredients: form.ingredients.filter((_, j) => j !== i) })
@@ -808,8 +819,7 @@ export default function RecettesPage() {
                                 +
                               </span>
                               <span className="font-medium tnum">
-                                {ing.quantity && `${ing.quantity}`}
-                                {ing.unit && ` ${ing.unit}`}
+                                {formatQuantity(ing.quantity, ing.unit)}
                               </span>
                               <span style={{ color: "var(--color-ink-soft)" }}>{ing.name}</span>
                             </button>

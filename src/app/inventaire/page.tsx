@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/components/toast";
+import { matchSearch, formatQuantity } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -36,11 +37,6 @@ const TONES: Record<LocationKey, "olive" | "neutral" | "mustard"> = {
   placard: "neutral",
   congélateur: "mustard",
 };
-
-function fmtQty(qty: number): string {
-  if (Number.isInteger(qty)) return String(qty);
-  return qty.toFixed(2).replace(/\.?0+$/, "");
-}
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
@@ -134,8 +130,9 @@ export default function InventairePage() {
 
   const filteredProducts = useMemo(() => {
     if (!addSearch) return [];
-    const s = addSearch.toLowerCase();
-    return products.filter((p) => p.name.toLowerCase().includes(s)).slice(0, 12);
+    return products
+      .filter((p) => matchSearch(addSearch, p.name, p.category))
+      .slice(0, 12);
   }, [products, addSearch]);
 
   return (
@@ -337,7 +334,7 @@ export default function InventairePage() {
                             className="font-mono text-[10px] truncate"
                             style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
                           >
-                            {it.quantity ? `${fmtQty(it.quantity)}${it.unit ? " " + it.unit : ""}` : "—"}
+                            {it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}
                           </p>
                         </div>
                         <span

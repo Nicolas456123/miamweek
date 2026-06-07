@@ -10,6 +10,7 @@ import {
   PageHeader,
   SectionTitle,
 } from "@/components/ui-kit";
+import { matchSearch } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -116,9 +117,8 @@ export default function PreferencesPage() {
 
   const filteredProducts = useMemo(() => {
     if (!search) return [];
-    const s = search.toLowerCase();
     return products
-      .filter((p) => p.name.toLowerCase().includes(s) && !prefProductNames.has(p.name))
+      .filter((p) => matchSearch(search, p.name, p.category) && !prefProductNames.has(p.name))
       .slice(0, 12);
   }, [products, search, prefProductNames]);
 

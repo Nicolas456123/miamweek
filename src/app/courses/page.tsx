@@ -141,13 +141,14 @@ export default function CoursesPage() {
     const checked = items.filter((i) => !!i.checked).length;
     const unchecked = items.filter((i) => !i.checked).length;
     let msg = `Valider les courses ?\n\n${checked} article(s) pris`;
-    if (unchecked > 0) msg += `\n${unchecked} article(s) non pris (seront supprimés)`;
-    msg += `\n\nLes articles cochés seront ajoutés à ton inventaire.`;
+    if (unchecked > 0) msg += `\n${unchecked} article(s) non pris (gardés dans ta liste)`;
+    msg += `\n\nLes articles pris seront ajoutés à ton inventaire, les autres reviennent dans ta liste de préparation.`;
     if (!confirm(msg)) return;
 
     const res = await fetch("/api/list/finish", { method: "POST" });
     const data = await res.json();
-    toast(`Courses terminées · ${data.itemsProcessed || 0} produit(s) ajouté(s) à l'inventaire.`);
+    const kept = unchecked > 0 ? ` · ${unchecked} gardé(s) dans ta liste` : "";
+    toast(`Courses terminées · ${data.itemsProcessed || 0} produit(s) à l'inventaire${kept}.`);
     setTimeout(() => {
       window.location.href = "/inventaire";
     }, 1500);

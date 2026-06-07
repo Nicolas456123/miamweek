@@ -5,32 +5,40 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
+  const list = searchParams.get("list");
 
-  // Lazily ensure the "unavailable" column exists so it is returned to clients
+  // Lazily ensure optional columns exist so they are returned to clients
   try { await query("ALTER TABLE list_items ADD COLUMN unavailable INTEGER DEFAULT 0"); } catch { /* already exists */ }
+  try { await query("ALTER TABLE list_items ADD COLUMN list_name TEXT DEFAULT 'Ma liste'"); } catch { /* already exists */ }
 
+  const clauses: string[] = [];
+  const args: (string | number | null)[] = [];
   if (status) {
-    const result = await query(
-      "SELECT * FROM list_items WHERE list_status = ?",
-      [status]
-    );
-    return Response.json(result.rows);
+    clauses.push("list_status = ?");
+    args.push(status);
   }
-
-  const result = await query("SELECT * FROM list_items");
+  if (list) {
+    clauses.push("list_name = ?");
+    args.push(list);
+  }
+  const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
+  const result = await query(`SELECT * FROM list_items${where}`, args);
   return Response.json(result.rows);
 }
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { productId, productName, quantity, unit, category, source, listStatus, sourceRecipe } = body;
+  const { productId, productName, quantity, unit, category, source, listStatus, sourceRecipe, listName } = body;
 
   if (!productName) {
     return Response.json({ error: "productName is required" }, { status: 400 });
   }
 
-  // Add source_recipe column if it doesn't exist yet
+  const finalListName = listName || "Ma liste";
+
+  // Add optional columns if they don't exist yet
   try { await query("ALTER TABLE list_items ADD COLUMN source_recipe TEXT"); } catch { /* already exists */ }
+  try { await query("ALTER TABLE list_items ADD COLUMN list_name TEXT DEFAULT 'Ma liste'"); } catch { /* already exists */ }
 
   // For recipe ingredients, convert to purchase units (e.g., 150g lardons → 1 paquet)
   let finalQty = quantity || null;
@@ -54,11 +62,11 @@ export async function POST(request: Request) {
     }
   }
 
-  // Check if same product already in list (same status) → merge quantities
+  // Check if same product already in list (same status + same list) → merge quantities
   if (finalProductId) {
     const existing = await query(
-      "SELECT id, quantity FROM list_items WHERE product_id = ? AND list_status = ? LIMIT 1",
-      [finalProductId, listStatus || "prep"]
+      "SELECT id, quantity FROM list_items WHERE product_id = ? AND list_status = ? AND list_name = ? LIMIT 1",
+      [finalProductId, listStatus || "prep", finalListName]
     );
     if (existing.rows.length > 0) {
       const existingQty = (existing.rows[0].quantity as number) || 1;
@@ -73,7 +81,7 @@ export async function POST(request: Request) {
   }
 
   const result = await query(
-    "INSERT INTO list_items (product_id, product_name, quantity, unit, category, source, list_status, source_recipe) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+    "INSERT INTO list_items (product_id, product_name, quantity, unit, category, source, list_status, source_recipe, list_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
     [
       finalProductId,
       productName,
@@ -83,6 +91,7 @@ export async function POST(request: Request) {
       source || "manual",
       listStatus || "prep",
       sourceRecipe || null,
+      finalListName,
     ]
   );
 

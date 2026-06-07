@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/toast";
+import { matchSearch } from "@/lib/utils";
 
 type Recipe = {
   id: number;
@@ -126,7 +127,7 @@ export default function MenuPage() {
   };
 
   const filteredRecipes = search
-    ? recipes.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()))
+    ? recipes.filter((r) => matchSearch(search, r.name, r.category))
     : recipes.slice(0, 12);
 
   const personsLabel = persons >= 0 && persons < NUMERALS_FR.length ? NUMERALS_FR[persons] : String(persons);

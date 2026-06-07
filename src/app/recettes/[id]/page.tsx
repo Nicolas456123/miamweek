@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { RecipePhoto } from "@/components/recipe-photo";
+import { formatQuantity } from "@/lib/utils";
 
 type Ingredient = {
   id?: number;
@@ -45,10 +46,6 @@ function formatTime(minutes: number): string {
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
 }
 
-function fmtQty(qty: number): string {
-  if (Number.isInteger(qty)) return String(qty);
-  return qty.toFixed(2).replace(/\.?0+$/, "");
-}
 
 const DIFFICULTY_STARS: Record<string, string> = {
   facile: "★",
@@ -297,7 +294,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                     className="font-mono text-xs tnum shrink-0"
                     style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
                   >
-                    {ing.quantity ? `${fmtQty(ing.quantity)} ${ing.unit || ""}` : "—"}
+                    {ing.quantity ? formatQuantity(ing.quantity, ing.unit) : "—"}
                   </span>
                 </li>
               ))}

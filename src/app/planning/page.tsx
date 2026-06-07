@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { getMonday, DAYS, MEAL_SLOTS } from "@/lib/utils";
+import { getMonday, DAYS, MEAL_SLOTS, matchSearch } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 
 type Recipe = {
@@ -259,8 +259,7 @@ export default function PlanningPage() {
 
   const filteredRecipes = useMemo(() => {
     if (!recipeSearch) return recipes;
-    const s = recipeSearch.toLowerCase();
-    return recipes.filter((r) => r.name.toLowerCase().includes(s));
+    return recipes.filter((r) => matchSearch(recipeSearch, r.name, r.category));
   }, [recipes, recipeSearch]);
 
   // Stats for the hero

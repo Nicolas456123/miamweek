@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
+import { matchSearch, formatQuantity, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type Product = {
   id: number;
@@ -66,11 +67,6 @@ const CATEGORY_ORDER = [
   "Autre",
 ];
 
-function fmtQty(qty: number): string {
-  if (Number.isInteger(qty)) return String(qty);
-  return qty.toFixed(2).replace(/\.?0+$/, "");
-}
-
 function getStep(unit: string): number {
   const u = unit.toLowerCase();
   if (u === "g" || u === "ml") return 50;
@@ -93,12 +89,19 @@ export default function ListePage() {
   const [customName, setCustomName] = useState("");
   const [customQty, setCustomQty] = useState("");
   const [customUnit, setCustomUnit] = useState("pcs");
+  const [customCategory, setCustomCategory] = useState<string>("Autre");
   const [now, setNow] = useState<Date | null>(null);
   const nextTempIdRef = useRef(-1);
 
   useEffect(() => {
     setNow(new Date());
   }, []);
+
+  // Ouvre le panneau d'ajout en pré-sélectionnant la catégorie du filtre actif.
+  const openAddPanel = () => {
+    if (activeCategory) setCustomCategory(activeCategory);
+    setShowAdd(true);
+  };
 
   const fetchList = useCallback(() => {
     fetch("/api/list?status=prep")
@@ -160,6 +163,7 @@ export default function ListePage() {
 
   const addCustom = () => {
     if (!customName.trim()) return;
+    const category = customCategory || activeCategory || "Autre";
     const tempId = nextTempIdRef.current--;
     const newItem: ListItem = {
       id: tempId,
@@ -167,7 +171,7 @@ export default function ListePage() {
       product_name: customName,
       quantity: customQty ? Number(customQty) : 1,
       unit: customUnit,
-      category: activeCategory || "Autre",
+      category,
       checked: 0,
       source: "manual",
       list_status: "prep",
@@ -181,7 +185,7 @@ export default function ListePage() {
         productName: customName,
         quantity: customQty ? Number(customQty) : 1,
         unit: customUnit,
-        category: activeCategory || "Autre",
+        category,
         source: "manual",
         listStatus: "prep",
       }),
@@ -278,8 +282,9 @@ export default function ListePage() {
 
   const filteredProducts = useMemo(() => {
     if (!productSearch) return [];
-    const s = productSearch.toLowerCase();
-    return products.filter((p) => p.name.toLowerCase().includes(s)).slice(0, 12);
+    return products
+      .filter((p) => matchSearch(productSearch, p.name, p.category))
+      .slice(0, 12);
   }, [products, productSearch]);
 
   // Title — nN articles, un panier
@@ -422,7 +427,7 @@ export default function ListePage() {
             : "ajouté manuellement"}
         </p>
         <button
-          onClick={() => setShowAdd(!showAdd)}
+          onClick={() => (showAdd ? setShowAdd(false) : openAddPanel())}
           className="text-sm hover:underline"
           style={{ color: "var(--color-terracotta-deep)" }}
         >
@@ -477,13 +482,30 @@ export default function ListePage() {
               placeholder="qté"
               className="md:w-20 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm tnum focus:outline-none focus:border-[var(--color-terracotta)]"
             />
-            <input
-              type="text"
+            <select
               value={customUnit}
               onChange={(e) => setCustomUnit(e.target.value)}
-              placeholder="unité"
-              className="md:w-20 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
-            />
+              aria-label="Unité"
+              className="md:w-24 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
+            >
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+            <select
+              value={customCategory}
+              onChange={(e) => setCustomCategory(e.target.value)}
+              aria-label="Catégorie"
+              className="md:w-40 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
+            >
+              {[...PRODUCT_CATEGORIES, "Autre"].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
             <button
               onClick={addCustom}
               disabled={!customName.trim()}
@@ -525,7 +547,7 @@ export default function ListePage() {
               Vers planning
             </Link>
             <button
-              onClick={() => setShowAdd(true)}
+              onClick={openAddPanel}
               className="rounded-full px-5 py-2.5 text-sm font-medium"
               style={{
                 background: "var(--color-terracotta)",
@@ -600,7 +622,7 @@ export default function ListePage() {
                       className="font-mono text-[10px] mt-0.5 truncate"
                       style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
                     >
-                      {it.quantity ? `${fmtQty(it.quantity)}${it.unit ? " " + it.unit : ""}` : ""}
+                      {it.quantity ? formatQuantity(it.quantity, it.unit) : ""}
                       {it.source_recipe ? ` · ${it.source_recipe}` : ""}
                     </p>
                   </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icons";
+import { formatQuantity } from "@/lib/utils";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 import { useToast } from "@/components/toast";
 import {
@@ -388,7 +389,7 @@ export default function CoursesPage() {
                           className="font-mono text-xs tnum shrink-0"
                           style={{ color: "var(--color-ink-mute)" }}
                         >
-                          {item.quantity} {item.unit}
+                          {formatQuantity(item.quantity, item.unit)}
                         </span>
                       )}
                       {item.source === "recipe" && !item.source_recipe && (

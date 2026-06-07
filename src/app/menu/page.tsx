@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/toast";
-import { matchSearch } from "@/lib/utils";
+import { matchSearch, formatQuantity } from "@/lib/utils";
 
 type Recipe = {
   id: number;
@@ -63,14 +63,20 @@ export default function MenuPage() {
 
   const addMenuToList = async () => {
     if (!selectedPlat) return;
-    const menuLabel = `Menu: ${selectedPlat.name}`;
+    const menuLabel = `Menu: ${selectedPlat.name} (${persons} pers.)`;
+    // Mise à l'échelle des quantités selon le nombre de personnes choisi :
+    // quantité affichée = quantité de la recette / portions recette × personnes.
+    const baseServings = selectedPlat.servings && selectedPlat.servings > 0 ? selectedPlat.servings : 2;
+    const factor = persons / baseServings;
     for (const ing of selectedPlat.ingredients) {
+      const scaledQty =
+        ing.quantity != null ? Math.round(ing.quantity * factor * 100) / 100 : 1;
       await fetch("/api/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName: ing.name,
-          quantity: ing.quantity || 1,
+          quantity: scaledQty || 1,
           unit: ing.unit || "pcs",
           category: ing.category || "Autre",
           source: "recipe",
@@ -148,7 +154,7 @@ export default function MenuPage() {
       label: "Plat",
       tone: "terra" as const,
       suggestion: selectedPlat ? { name: selectedPlat.name, description: selectedPlat.description || "" } : undefined,
-      info: selectedPlat ? `${selectedPlat.category || "—"} · ${selectedPlat.servings} pers.` : "à choisir",
+      info: selectedPlat ? `${selectedPlat.category || "—"} · ${persons} pers.` : "à choisir",
     },
     { key: "dessert", label: "Dessert", tone: "mustard" as const, suggestion: suggestions?.dessert, info: "douceur · 30 min" },
   ];
@@ -312,8 +318,8 @@ export default function MenuPage() {
                     >
                       {r.name}
                     </p>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-auto">
-                      {r.category && (
+                    {r.category && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-auto">
                         <span
                           className="font-mono text-[9px] uppercase rounded-full px-2 py-0.5"
                           style={{
@@ -325,14 +331,8 @@ export default function MenuPage() {
                         >
                           {r.category}
                         </span>
-                      )}
-                      <span
-                        className="font-mono text-[9px] tnum"
-                        style={{ color: "var(--color-ink-faint)", letterSpacing: "0.04em" }}
-                      >
-                        {r.servings} PERS
-                      </span>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </button>
               );
@@ -404,6 +404,41 @@ export default function MenuPage() {
             </div>
           ))}
         </div>
+
+        {/* Ingrédients du plat, mis à l'échelle du nombre de personnes */}
+        {selectedPlat && selectedPlat.ingredients.length > 0 && (() => {
+          const base =
+            selectedPlat.servings && selectedPlat.servings > 0 ? selectedPlat.servings : 2;
+          const factor = persons / base;
+          return (
+            <div
+              className="mt-4 rounded-md p-4"
+              style={{ background: "var(--color-cream-pale)", border: "1px solid var(--color-line)" }}
+            >
+              <div className="flex items-baseline justify-between mb-3">
+                <span className="eyebrow">Ingrédients · {persons} pers.</span>
+                <span className="font-mono text-[10px]" style={{ color: "var(--color-ink-faint)", letterSpacing: "0.04em" }}>
+                  recette pour {base} · ×{(Math.round(factor * 100) / 100).toString().replace(".", ",")}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                {selectedPlat.ingredients.map((ing, i) => {
+                  const q = ing.quantity != null ? Math.round(ing.quantity * factor * 100) / 100 : null;
+                  return (
+                    <div key={i} className="flex items-baseline justify-between gap-2 text-sm">
+                      <span style={{ color: "var(--color-ink-soft)" }} className="truncate">
+                        {ing.name}
+                      </span>
+                      <span className="font-mono tnum text-[12px] shrink-0" style={{ color: "var(--color-ink-mute)" }}>
+                        {q != null ? formatQuantity(q, ing.unit) : "—"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       {/* Actions — sticky en bas sur mobile pour rester accessibles */}

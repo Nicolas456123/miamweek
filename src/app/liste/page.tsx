@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
+import { CategoryIcon } from "@/components/category-icons";
 import { useOfflineSync, offlineFetch } from "@/lib/offline-sync";
 import { rankedFilter, formatQuantity, estimatePrice, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
@@ -90,6 +91,8 @@ export default function ListePage() {
   const [customQty, setCustomQty] = useState("");
   const [customUnit, setCustomUnit] = useState("pcs");
   const [customCategory, setCustomCategory] = useState<string>("Autre");
+  const [catalogCat, setCatalogCat] = useState<string | null>(null);
+  const [orderCounts, setOrderCounts] = useState<Record<string, number>>({});
   const [now, setNow] = useState<Date | null>(null);
   const nextTempIdRef = useRef(-1);
 
@@ -117,6 +120,19 @@ export default function ListePage() {
       .then((r) => r.json())
       .then((d) => setProducts(Array.isArray(d) ? d : []))
       .catch(console.error);
+    // Fréquence de commande : combien de fois chaque produit a été ajouté
+    fetch("/api/list")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        const counts: Record<string, number> = {};
+        for (const it of data) {
+          const k = (it.product_name || "").toLowerCase();
+          if (k) counts[k] = (counts[k] || 0) + 1;
+        }
+        setOrderCounts(counts);
+      })
+      .catch(() => {});
     fetchList();
     const id = setInterval(() => {
       if (navigator.onLine) safeFetch();
@@ -268,10 +284,49 @@ export default function ListePage() {
     return set.size;
   }, [items]);
 
+  const freqOf = useCallback(
+    (name: string) => orderCounts[name.toLowerCase()] || 0,
+    [orderCounts]
+  );
+
   const filteredProducts = useMemo(() => {
     if (!productSearch) return [];
     return rankedFilter(products, productSearch, (p) => [p.name, p.category]).slice(0, 12);
   }, [products, productSearch]);
+
+  // Catalogue à parcourir (sans recherche) : groupé par type, les plus
+  // commandés d'abord dans chaque catégorie.
+  const catalogByCategory = useMemo(() => {
+    const base = catalogCat
+      ? products.filter((p) => (p.category || "Autre") === catalogCat)
+      : products;
+    const groups: Record<string, Product[]> = {};
+    for (const p of base) {
+      const cat = p.category || "Autre";
+      (groups[cat] ||= []).push(p);
+    }
+    const ordered: [string, Product[]][] = [];
+    for (const cat of CATEGORY_ORDER) {
+      if (groups[cat]) ordered.push([cat, groups[cat]]);
+    }
+    for (const [cat, list] of Object.entries(groups)) {
+      if (!CATEGORY_ORDER.includes(cat)) ordered.push([cat, list]);
+    }
+    // Tri interne : fréquence décroissante puis nom
+    for (const [, list] of ordered) {
+      list.sort((a, b) => {
+        const d = freqOf(b.name) - freqOf(a.name);
+        return d !== 0 ? d : a.name.localeCompare(b.name);
+      });
+    }
+    return ordered;
+  }, [products, catalogCat, freqOf]);
+
+  const catalogCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) set.add(p.category || "Autre");
+    return CATEGORY_ORDER.filter((c) => set.has(c));
+  }, [products]);
 
   // Title — nN articles, un panier
   const articlesNum = totalCount > 0 ? numeralFR(totalCount).toLowerCase() : "zéro";
@@ -428,22 +483,123 @@ export default function ListePage() {
             placeholder="Chercher un produit dans le catalogue…"
             className="w-full bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
           />
-          {filteredProducts.length > 0 && (
+
+          {/* Résultats de recherche */}
+          {productSearch && filteredProducts.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {filteredProducts.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => addProduct(p)}
-                  className="px-3 py-2 rounded-md border text-left text-sm transition-colors hover:bg-[var(--color-cream-pale)]"
+                  className="flex items-center justify-between gap-1 px-3 py-2 rounded-md border text-left text-sm transition-colors hover:bg-[var(--color-cream-pale)]"
                   style={{
                     background: "var(--color-cream-pale)",
                     borderColor: "var(--color-line)",
                     color: "var(--color-ink-soft)",
                   }}
                 >
-                  {p.name}
+                  <span className="truncate">{p.name}</span>
+                  {freqOf(p.name) > 0 && (
+                    <span className="font-mono text-[9px] tnum shrink-0" style={{ color: "var(--color-terracotta-deep)" }}>
+                      ×{freqOf(p.name)}
+                    </span>
+                  )}
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Catalogue à parcourir (sans recherche) : par type, plus commandés d'abord */}
+          {!productSearch && (
+            <div className="space-y-3">
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                <button
+                  onClick={() => setCatalogCat(null)}
+                  className="font-mono text-[10px] uppercase tracking-wider rounded-full px-2.5 py-1 shrink-0 transition-colors"
+                  style={{
+                    background: !catalogCat ? "var(--color-ink)" : "var(--color-cream-pale)",
+                    color: !catalogCat ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
+                    border: "1px solid",
+                    borderColor: !catalogCat ? "var(--color-ink)" : "var(--color-line)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  Tout
+                </button>
+                {catalogCategories.map((c) => {
+                  const active = catalogCat === c;
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => setCatalogCat(active ? null : c)}
+                      className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider rounded-full px-2.5 py-1 shrink-0 whitespace-nowrap transition-colors"
+                      style={{
+                        background: active ? "var(--color-terracotta)" : "var(--color-cream-pale)",
+                        color: active ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
+                        border: "1px solid",
+                        borderColor: active ? "var(--color-terracotta)" : "var(--color-line)",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      <CategoryIcon category={c} size={12} />
+                      {c
+                        .replace("Produits laitiers", "Laitiers")
+                        .replace("Fruits & Légumes", "Fruits & Lég")
+                        .replace("Viandes & Poissons", "Viandes")
+                        .replace("Hygiène & Beauté", "Hygiène")
+                        .replace("Entretien & Maison", "Entretien")
+                        .replace("Épices & Condiments", "Épices")}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-4 pr-1">
+                {catalogByCategory.map(([cat, list]) => (
+                  <div key={cat}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <CategoryIcon category={cat} size={14} />
+                      <span className="eyebrow" style={{ color: "var(--color-ink-soft)" }}>
+                        {cat}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {list.slice(0, catalogCat ? 60 : 9).map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => addProduct(p)}
+                          className="flex items-center justify-between gap-1 px-3 py-2 rounded-md border text-left text-sm transition-colors hover:bg-[var(--color-cream-pale)]"
+                          style={{
+                            background: "var(--color-cream-pale)",
+                            borderColor: "var(--color-line)",
+                            color: "var(--color-ink-soft)",
+                          }}
+                        >
+                          <span className="truncate">{p.name}</span>
+                          {freqOf(p.name) > 0 && (
+                            <span
+                              className="font-mono text-[9px] tnum shrink-0"
+                              style={{ color: "var(--color-terracotta-deep)" }}
+                              title="Déjà commandé"
+                            >
+                              ×{freqOf(p.name)}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {!catalogCat && list.length > 9 && (
+                      <button
+                        onClick={() => setCatalogCat(cat)}
+                        className="mt-1.5 text-xs hover:underline"
+                        style={{ color: "var(--color-terracotta-deep)" }}
+                      >
+                        + {list.length - 9} autre{list.length - 9 > 1 ? "s" : ""} dans {cat}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           <div className="flex flex-col md:flex-row gap-2 pt-3 border-t" style={{ borderColor: "var(--color-line)" }}>

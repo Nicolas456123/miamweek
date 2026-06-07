@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { rankedFilter, formatQuantity, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ type EditDraft = {
   location: LocationKey;
   addedAt: string;
   expiresAt: string;
+  opened: boolean;
   openedAt: string;
   shelfLife: string;
 };
@@ -181,6 +183,7 @@ export default function InventairePage() {
       location: (it.location as LocationKey) || "placard",
       addedAt: isoDate(it.added_at),
       expiresAt: isoDate(it.expires_at),
+      opened: !!it.opened_at,
       openedAt: isoDate(it.opened_at),
       shelfLife:
         it.shelf_life_after_open_days != null ? String(it.shelf_life_after_open_days) : "",
@@ -205,7 +208,7 @@ export default function InventairePage() {
       location: draft.location,
       addedAt: draft.addedAt || null,
       expiresAt: draft.expiresAt || null,
-      openedAt: draft.openedAt || null,
+      openedAt: draft.opened ? draft.openedAt || isoDate(new Date().toISOString()) : null,
       shelfLifeAfterOpenDays: shelf,
     };
     setItems((prev) =>
@@ -319,20 +322,43 @@ export default function InventairePage() {
             <input type="date" value={draft.expiresAt} onChange={(e) => set({ expiresAt: e.target.value })} className={fieldCls} />
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-2 [&>label]:min-w-0">
-          <label className="block">
-            <span className="eyebrow block mb-1">Date d&apos;ouverture</span>
-            <input type="date" value={draft.openedAt} onChange={(e) => set({ openedAt: e.target.value })} className={fieldCls} />
-          </label>
-          <label className="block">
-            <span className="eyebrow block mb-1">Max après ouverture (j)</span>
-            <input type="number" inputMode="numeric" placeholder="ex : 5" value={draft.shelfLife} onChange={(e) => set({ shelfLife: e.target.value })} className={`${fieldCls} tnum`} />
-          </label>
-        </div>
-        {draft.openedAt && draft.shelfLife && (
-          <p className="font-mono text-[10px]" style={{ color: "#8a6d10", letterSpacing: "0.04em" }}>
-            → à consommer avant le {addDays(draft.openedAt, Number(draft.shelfLife))}
-          </p>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={draft.opened}
+            onChange={(e) =>
+              set({
+                opened: e.target.checked,
+                openedAt:
+                  e.target.checked && !draft.openedAt
+                    ? isoDate(new Date().toISOString())
+                    : draft.openedAt,
+              })
+            }
+            className="w-4 h-4 accent-[var(--color-terracotta)]"
+          />
+          <span className="text-sm" style={{ color: "var(--color-ink-soft)" }}>
+            Produit ouvert / entamé
+          </span>
+        </label>
+        {draft.opened && (
+          <>
+            <div className="grid grid-cols-2 gap-2 [&>label]:min-w-0">
+              <label className="block">
+                <span className="eyebrow block mb-1">Date d&apos;ouverture</span>
+                <input type="date" value={draft.openedAt} onChange={(e) => set({ openedAt: e.target.value })} className={fieldCls} />
+              </label>
+              <label className="block">
+                <span className="eyebrow block mb-1">Max après ouverture (j)</span>
+                <input type="number" inputMode="numeric" placeholder="ex : 5" value={draft.shelfLife} onChange={(e) => set({ shelfLife: e.target.value })} className={`${fieldCls} tnum`} />
+              </label>
+            </div>
+            {draft.openedAt && draft.shelfLife && (
+              <p className="font-mono text-[10px]" style={{ color: "#8a6d10", letterSpacing: "0.04em" }}>
+                → à consommer avant le {addDays(draft.openedAt, Number(draft.shelfLife))}
+              </p>
+            )}
+          </>
         )}
         <div className="flex items-center justify-between pt-1">
           <button
@@ -368,17 +394,18 @@ export default function InventairePage() {
       <div className="flex items-baseline justify-between mb-5">
         <p className="eyebrow">Ce qu&apos;il y a chez toi · {String(total).padStart(2, "0")} produits</p>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => toast("Scanner ticket : à venir.")}
+          <Link
+            href="/ingredients"
             className="rounded-full px-4 py-2 text-sm transition-colors"
             style={{
               background: "var(--color-cream-pale)",
               border: "1px solid var(--color-line)",
               color: "var(--color-ink-soft)",
             }}
+            title="Voir et modifier la base d'ingrédients (valeurs standard, conservation…)"
           >
-            Scanner ticket
-          </button>
+            ⚙ Base d&apos;ingrédients
+          </Link>
           <button
             onClick={() => setShowAdd(!showAdd)}
             className="rounded-full px-4 py-2 text-sm font-medium"

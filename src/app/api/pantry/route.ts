@@ -37,6 +37,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { productId, productName, quantity, unit, category, location } = body;
 
+    try { await query("ALTER TABLE pantry_items ADD COLUMN shelf_life_after_open_days INTEGER"); } catch { /* exists */ }
+
     if (!productName) {
       return Response.json(
         { error: "productName is required" },
@@ -64,9 +66,31 @@ export async function POST(request: Request) {
       return Response.json(updated.rows[0]);
     }
 
+    // Reprend les valeurs standard du produit (conservation, après ouverture)
+    let shelfLifeAfterOpen: number | null = null;
+    let expiresAt: string | null = null;
+    if (productId) {
+      try {
+        const prod = await query(
+          "SELECT default_shelf_life_days, default_shelf_life_after_open_days FROM products WHERE id = ?",
+          [productId]
+        );
+        if (prod.rows.length > 0) {
+          const p = prod.rows[0];
+          shelfLifeAfterOpen = (p.default_shelf_life_after_open_days as number | null) ?? null;
+          const sl = p.default_shelf_life_days as number | null;
+          if (sl != null) {
+            const d = new Date();
+            d.setDate(d.getDate() + sl);
+            expiresAt = d.toISOString().split("T")[0];
+          }
+        }
+      } catch { /* colonnes absentes */ }
+    }
+
     const result = await query(
-      `INSERT INTO pantry_items (product_id, product_name, quantity, unit, category, location)
-       VALUES (?, ?, ?, ?, ?, ?) RETURNING *`,
+      `INSERT INTO pantry_items (product_id, product_name, quantity, unit, category, location, shelf_life_after_open_days, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       [
         productId || null,
         productName,
@@ -74,6 +98,8 @@ export async function POST(request: Request) {
         unit || "pcs",
         category || "Autre",
         location || "placard",
+        shelfLifeAfterOpen,
+        expiresAt,
       ]
     );
 

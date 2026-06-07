@@ -59,6 +59,7 @@ const CATEGORY_ORDER = [
   "Viandes & Poissons",
   "Produits laitiers",
   "Boulangerie",
+  "Desserts & Sucré",
   "Épicerie",
   "Surgelés",
   "Boissons",
@@ -93,6 +94,13 @@ export default function ListePage() {
   const [customCategory, setCustomCategory] = useState<string>("Autre");
   const [catalogCat, setCatalogCat] = useState<string | null>(null);
   const [orderCounts, setOrderCounts] = useState<Record<string, number>>({});
+  const [pending, setPending] = useState<{
+    productId: number | null;
+    name: string;
+    qty: string;
+    unit: string;
+    category: string;
+  } | null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const nextTempIdRef = useRef(-1);
 
@@ -140,16 +148,30 @@ export default function ListePage() {
     return () => clearInterval(id);
   }, [fetchList, safeFetch]);
 
-  const addProduct = (p: Product) => {
-    const tempId = nextTempIdRef.current--;
-    const qty = p.default_quantity || 1;
-    const newItem: ListItem = {
-      id: tempId,
-      product_id: p.id,
-      product_name: p.name,
-      quantity: qty,
+  // Étape de validation : sélectionner un produit le met « en attente » pour
+  // ajuster quantité/unité/catégorie avant de l'ajouter réellement à la liste.
+  const stageProduct = (p: Product) => {
+    setPending({
+      productId: p.id,
+      name: p.name,
+      qty: String(p.default_quantity || 1),
       unit: p.default_unit,
       category: p.category,
+    });
+    setProductSearch("");
+  };
+
+  const confirmPending = () => {
+    if (!pending || !pending.name.trim()) return;
+    const qty = pending.qty ? Number(pending.qty.replace(",", ".")) : 1;
+    const tempId = nextTempIdRef.current--;
+    const newItem: ListItem = {
+      id: tempId,
+      product_id: pending.productId,
+      product_name: pending.name,
+      quantity: qty,
+      unit: pending.unit,
+      category: pending.category,
       checked: 0,
       source: "manual",
       list_status: "prep",
@@ -160,11 +182,11 @@ export default function ListePage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        productId: p.id,
-        productName: p.name,
+        productId: pending.productId,
+        productName: pending.name,
         quantity: qty,
-        unit: p.default_unit,
-        category: p.category,
+        unit: pending.unit,
+        category: pending.category,
         source: "manual",
         listStatus: "prep",
       }),
@@ -174,7 +196,7 @@ export default function ListePage() {
         setItems((prev) => prev.map((it) => (it.id === tempId ? saved : it)));
       }
     }).catch(() => {});
-    setProductSearch("");
+    setPending(null);
   };
 
   const addCustom = () => {
@@ -476,6 +498,77 @@ export default function ListePage() {
           className="mb-8 rounded-md p-5 space-y-3"
           style={{ background: "var(--color-cream-deep)" }}
         >
+          {/* Validation : confirmer le produit sélectionné avant ajout */}
+          {pending && (
+            <div
+              className="rounded-md p-3 space-y-2"
+              style={{ background: "var(--color-cream-pale)", border: "1px solid var(--color-terracotta)" }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+                  {pending.name}
+                </span>
+                <span className="eyebrow" style={{ color: "var(--color-terracotta-deep)" }}>
+                  à valider
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={pending.qty}
+                  onChange={(e) => setPending({ ...pending, qty: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && confirmPending()}
+                  aria-label="Quantité"
+                  className="w-20 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-3 py-2 text-sm tnum focus:outline-none focus:border-[var(--color-terracotta)]"
+                />
+                <select
+                  value={pending.unit}
+                  onChange={(e) => setPending({ ...pending, unit: e.target.value })}
+                  aria-label="Unité"
+                  className="w-24 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
+                >
+                  {!(UNITS as readonly string[]).includes(pending.unit) && (
+                    <option value={pending.unit}>{pending.unit}</option>
+                  )}
+                  {UNITS.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+                <select
+                  value={pending.category}
+                  onChange={(e) => setPending({ ...pending, category: e.target.value })}
+                  aria-label="Catégorie"
+                  className="flex-1 min-w-[8rem] bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2 py-2 text-sm focus:outline-none focus:border-[var(--color-terracotta)]"
+                >
+                  {[...PRODUCT_CATEGORIES, "Autre"].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setPending(null)}
+                  className="text-sm px-3 py-1.5 rounded-full"
+                  style={{ color: "var(--color-ink-mute)", border: "1px solid var(--color-line)" }}
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={confirmPending}
+                  className="text-sm px-4 py-1.5 rounded-full font-medium"
+                  style={{
+                    background: "var(--color-terracotta)",
+                    color: "var(--color-cream-pale)",
+                    border: "1px solid var(--color-terracotta)",
+                  }}
+                >
+                  Valider · ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
           <input
             type="text"
             value={productSearch}
@@ -490,7 +583,7 @@ export default function ListePage() {
               {filteredProducts.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => addProduct(p)}
+                  onClick={() => stageProduct(p)}
                   className="flex items-center justify-between gap-1 px-3 py-2 rounded-md border text-left text-sm transition-colors hover:bg-[var(--color-cream-pale)]"
                   style={{
                     background: "var(--color-cream-pale)",
@@ -567,7 +660,7 @@ export default function ListePage() {
                       {list.slice(0, catalogCat ? 60 : 9).map((p) => (
                         <button
                           key={p.id}
-                          onClick={() => addProduct(p)}
+                          onClick={() => stageProduct(p)}
                           className="flex items-center justify-between gap-1 px-3 py-2 rounded-md border text-left text-sm transition-colors hover:bg-[var(--color-cream-pale)]"
                           style={{
                             background: "var(--color-cream-pale)",

@@ -43,15 +43,18 @@ export async function PUT(
     const { id } = await params;
     const recipeId = parseInt(id, 10);
     const body = await request.json();
-    const { name, description, servings, category, ingredients, prepTime, cookTime, difficulty, utensils, steps } = body;
+    const { name, description, servings, category, ingredients, prepTime, cookTime, difficulty, utensils, steps, isPrepared } = body;
+
+    try { await query("ALTER TABLE recipes ADD COLUMN is_prepared INTEGER DEFAULT 0"); } catch { /* exists */ }
 
     const updateResult = await query(
-      "UPDATE recipes SET name = ?, description = ?, servings = ?, category = ?, prep_time = ?, cook_time = ?, difficulty = ?, utensils = ?, steps = ? WHERE id = ? RETURNING *",
+      "UPDATE recipes SET name = ?, description = ?, servings = ?, category = ?, prep_time = ?, cook_time = ?, difficulty = ?, utensils = ?, steps = ?, is_prepared = ? WHERE id = ? RETURNING *",
       [
         name, description || null, servings || null, category || null,
         prepTime || null, cookTime || null, difficulty || null,
         utensils ? JSON.stringify(utensils) : null,
         steps ? JSON.stringify(steps) : null,
+        isPrepared ? 1 : 0,
         recipeId,
       ]
     );

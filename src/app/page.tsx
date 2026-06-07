@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import { Logo } from "@/components/logo";
+import { ExpiryAlert } from "@/components/expiry-alert";
 import { getMonday, estimatePrice, formatQuantity } from "@/lib/utils";
 
 const DAYS_FR_SHORT = ["L", "M", "M", "J", "V", "S", "D"];
@@ -165,6 +166,7 @@ export default function HomePage() {
 
   return (
     <div className="pb-24 md:pb-8">
+      <ExpiryAlert />
       {/* Greeting eyebrow */}
       <div className="eyebrow mb-6 flex items-center gap-3">
         <span>bonsoir nicolas</span>

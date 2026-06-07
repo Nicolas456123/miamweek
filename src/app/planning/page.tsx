@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { getMonday, DAYS, MEAL_SLOTS, matchSearch } from "@/lib/utils";
 import { useToast } from "@/components/toast";
+import { ExpiryAlert } from "@/components/expiry-alert";
 
 type Recipe = {
   id: number;
@@ -409,10 +410,19 @@ export default function PlanningPage() {
           )}
         </div>
 
-        {config.mode === "skip" && periodMeals.length === 0 ? (
-          <p className="text-xs italic" style={{ color: "var(--color-ink-faint)" }}>
-            —
-          </p>
+        {config.mode === "skip" && periodMeals.length === 0 && !isAdding ? (
+          <button
+            onClick={() => setAddingSlot({ day: day.dayOfWeek, type: period, weekStart: day.weekStart })}
+            className="w-full py-1 text-xs transition-colors"
+            style={{
+              color: "var(--color-ink-faint)",
+              border: "1px dashed var(--color-line)",
+              borderRadius: 3,
+            }}
+            title={`Ajouter un repas le ${period === "lunch" ? "midi" : "soir"}`}
+          >
+            + {period === "lunch" ? "midi" : "soir"}
+          </button>
         ) : (
           <div className="space-y-1.5">
             {periodMeals.map((meal) => {
@@ -603,6 +613,7 @@ export default function PlanningPage() {
 
   return (
     <div className="pb-32 md:pb-8">
+      <ExpiryAlert />
       {/* Eyebrow */}
       <p className="eyebrow mb-5">la semaine en bouche</p>
 

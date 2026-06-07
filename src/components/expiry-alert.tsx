@@ -125,13 +125,22 @@ export function ExpiryAlert({ withinDays = 3 }: { withinDays?: number }) {
                 </li>
               )}
             </ul>
-            <Link
-              href="/inventaire"
-              className="inline-block mt-2 text-xs hover:underline"
-              style={{ color: "var(--color-terracotta-deep)" }}
-            >
-              Voir le stock →
-            </Link>
+            <div className="mt-2 flex items-center gap-3">
+              <Link
+                href="/recettes?antigaspi=1"
+                className="text-xs font-medium hover:underline"
+                style={{ color: "var(--color-olive-deep)" }}
+              >
+                🌱 Cuisiner avant que ce soit trop tard →
+              </Link>
+              <Link
+                href="/inventaire"
+                className="text-xs hover:underline"
+                style={{ color: "var(--color-ink-mute)" }}
+              >
+                Voir le stock
+              </Link>
+            </div>
           </div>
         </div>
         <button

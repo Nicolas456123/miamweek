@@ -64,7 +64,11 @@ export default function RecettesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterFavorites, setFilterFavorites] = useState(false);
-  const [filterAntiGaspi, setFilterAntiGaspi] = useState(false);
+  const [filterAntiGaspi, setFilterAntiGaspi] = useState<boolean>(
+    () =>
+      typeof window !== "undefined" &&
+      !!new URLSearchParams(window.location.search).get("antigaspi")
+  );
   const [search, setSearch] = useState("");
   const [expiringNames, setExpiringNames] = useState<string[]>([]);
   const [addedToList, setAddedToList] = useState<Set<number>>(new Set());

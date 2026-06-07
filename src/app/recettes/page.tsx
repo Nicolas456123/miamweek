@@ -14,6 +14,7 @@ import {
 import { RecipePhoto } from "@/components/recipe-photo";
 import { matchSearch, formatQuantity, normalize, UNITS } from "@/lib/utils";
 import { effectiveExpiry, daysUntil, type ExpiryItem } from "@/lib/expiry";
+import { cacheGet, cacheSet } from "@/lib/client-cache";
 
 type Ingredient = {
   id?: number;
@@ -59,7 +60,7 @@ const DIFFICULTY_TONE: Record<string, "olive" | "mustard" | "terra"> = {
 
 export default function RecettesPage() {
   const { toast } = useToast();
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>(() => cacheGet<Recipe[]>("recipes") ?? []);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -92,7 +93,12 @@ export default function RecettesPage() {
   const fetchRecipes = () => {
     fetch("/api/recipes")
       .then((r) => r.json())
-      .then((data) => setRecipes(Array.isArray(data) ? data : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setRecipes(data);
+          cacheSet("recipes", data);
+        }
+      })
       .catch(console.error);
   };
 

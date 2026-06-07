@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { matchSearch, formatQuantity } from "@/lib/utils";
+import { cacheGet, cacheSet } from "@/lib/client-cache";
 
 type Recipe = {
   id: number;
@@ -21,7 +22,7 @@ const NUMERALS_FR = ["zéro", "une", "deux", "trois", "quatre", "cinq", "six", "
 
 export default function MenuPage() {
   const { toast } = useToast();
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>(() => cacheGet<Recipe[]>("recipes") ?? []);
   const [selectedPlat, setSelectedPlat] = useState<Recipe | null>(null);
   const [persons, setPersons] = useState(3);
   const [suggestions, setSuggestions] = useState<{
@@ -36,7 +37,12 @@ export default function MenuPage() {
   useEffect(() => {
     fetch("/api/recipes")
       .then((r) => r.json())
-      .then((data) => setRecipes(Array.isArray(data) ? data : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setRecipes(data);
+          cacheSet("recipes", data);
+        }
+      })
       .catch(console.error);
   }, []);
 

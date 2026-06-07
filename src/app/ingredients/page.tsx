@@ -9,6 +9,7 @@ import {
   UNITS,
   PRODUCT_CATEGORIES,
 } from "@/lib/utils";
+import { cacheGet, cacheSet } from "@/lib/client-cache";
 
 type Product = {
   id: number;
@@ -49,7 +50,7 @@ const emptyDraft: Draft = {
 
 export default function IngredientsPage() {
   const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => cacheGet<Product[]>("products") ?? []);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -60,7 +61,12 @@ export default function IngredientsPage() {
   const fetchProducts = useCallback(() => {
     fetch("/api/products")
       .then((r) => r.json())
-      .then((d) => setProducts(Array.isArray(d) ? d : []))
+      .then((d) => {
+        if (Array.isArray(d)) {
+          setProducts(d);
+          cacheSet("products", d);
+        }
+      })
       .catch(() => {});
   }, []);
 

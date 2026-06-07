@@ -271,7 +271,7 @@ export default function InventairePage() {
   }, [products, addSearch]);
 
   const fieldCls =
-    "w-full bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-[var(--color-terracotta)]";
+    "w-full min-w-0 bg-[var(--color-cream-pale)] border border-[var(--color-line)] rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-[var(--color-terracotta)]";
 
   const renderEditPanel = () => {
     if (!draft) return null;
@@ -282,7 +282,7 @@ export default function InventairePage() {
           <span className="eyebrow block mb-1">Nom</span>
           <input type="text" value={draft.name} onChange={(e) => set({ name: e.target.value })} className={fieldCls} autoFocus />
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 [&>label]:min-w-0">
           <label className="block">
             <span className="eyebrow block mb-1">Quantité</span>
             <input type="number" inputMode="decimal" value={draft.quantity} onChange={(e) => set({ quantity: e.target.value })} className={`${fieldCls} tnum`} />
@@ -295,7 +295,7 @@ export default function InventairePage() {
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 [&>label]:min-w-0">
           <label className="block">
             <span className="eyebrow block mb-1">Emplacement</span>
             <select value={draft.location} onChange={(e) => set({ location: e.target.value as LocationKey })} className={fieldCls}>
@@ -309,7 +309,7 @@ export default function InventairePage() {
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 [&>label]:min-w-0">
           <label className="block">
             <span className="eyebrow block mb-1">Date d&apos;ajout</span>
             <input type="date" value={draft.addedAt} onChange={(e) => set({ addedAt: e.target.value })} className={fieldCls} />
@@ -319,7 +319,7 @@ export default function InventairePage() {
             <input type="date" value={draft.expiresAt} onChange={(e) => set({ expiresAt: e.target.value })} className={fieldCls} />
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 [&>label]:min-w-0">
           <label className="block">
             <span className="eyebrow block mb-1">Date d&apos;ouverture</span>
             <input type="date" value={draft.openedAt} onChange={(e) => set({ openedAt: e.target.value })} className={fieldCls} />

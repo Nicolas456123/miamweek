@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { ItemRow, ItemIcon } from "@/components/item-row";
 import { cacheGet, cacheSet } from "@/lib/client-cache";
-import { rankedFilter, formatQuantity, normalize, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
+import { rankedFilter, formatQuantity, normalize, getMonday, DAYS, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
+
+type PlannedMeal = { day_of_week: number; meal_type: string; recipe_id: number | null; custom_name: string | null };
+type RecipeLite = { id: number; name: string; ingredients?: { name: string; quantity: number | null; unit: string | null }[] };
 
 type Product = {
   id: number;
@@ -103,7 +106,9 @@ export default function InventairePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [activeLocation, setActiveLocation] = useState<LocationKey>("frigo");
-  const [stockGroupMode, setStockGroupMode] = useState<"location" | "category">("location");
+  const [stockGroupMode, setStockGroupMode] = useState<"location" | "category" | "meal">("location");
+  const [meals, setMeals] = useState<PlannedMeal[]>([]);
+  const [recipes, setRecipes] = useState<RecipeLite[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
 
@@ -130,7 +135,72 @@ export default function InventairePage() {
         }
       })
       .catch(() => {});
+    // Pour la vue « par repas prévu » : planning de la semaine + recettes
+    fetch(`/api/meal-plan?weekStart=${getMonday(new Date())}`)
+      .then((r) => r.json())
+      .then((d) => setMeals(Array.isArray(d) ? d : []))
+      .catch(() => {});
+    fetch("/api/recipes")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setRecipes(d);
+      })
+      .catch(() => {});
   }, []);
+
+  // Recherche d'un produit du stock par nom (souple)
+  const stockByName = useMemo(() => {
+    const m = new Map<string, PantryItem>();
+    for (const it of items) m.set(normalize(it.product_name), it);
+    return m;
+  }, [items]);
+  const findStock = (name: string): PantryItem | null => {
+    const n = normalize(name);
+    if (!n) return null;
+    if (stockByName.has(n)) return stockByName.get(n)!;
+    for (const [k, v] of stockByName) if (k.includes(n) || n.includes(k)) return v;
+    return null;
+  };
+
+  // Sections « par repas prévu » : ingrédients en stock / manquants + jours restants
+  const mealSections = useMemo(() => {
+    if (stockGroupMode !== "meal") return [];
+    const byId = new Map(recipes.map((r) => [r.id, r]));
+    const out: {
+      key: string;
+      name: string;
+      day: string;
+      daysLeft: number | null;
+      missingCount: number;
+      ings: { name: string; qty: number | null; unit: string | null; have: PantryItem | null }[];
+    }[] = [];
+    for (const m of meals) {
+      const rec = m.recipe_id != null ? byId.get(m.recipe_id) : undefined;
+      if (!rec || !rec.ingredients || rec.ingredients.length === 0) continue;
+      const ings = rec.ingredients.map((ing) => ({
+        name: ing.name,
+        qty: ing.quantity,
+        unit: ing.unit,
+        have: findStock(ing.name),
+      }));
+      const haveDays = ings
+        .filter((i) => i.have)
+        .map((i) => daysUntil(effectiveExpiry(i.have!)))
+        .filter((d): d is number => d !== null);
+      const daysLeft = haveDays.length ? Math.min(...haveDays) : null;
+      const missingCount = ings.filter((i) => !i.have).length;
+      out.push({
+        key: `${m.day_of_week}-${m.meal_type}-${m.recipe_id}`,
+        name: rec.name,
+        day: DAYS[m.day_of_week] ?? "",
+        daysLeft,
+        missingCount,
+        ings,
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockGroupMode, meals, recipes, items]);
 
   const addProduct = async (p: Product) => {
     await fetch("/api/pantry", {
@@ -562,7 +632,7 @@ export default function InventairePage() {
       {/* Affichage : par emplacement ou par catégorie */}
       <div className="flex items-center gap-2 mb-4">
         <span className="eyebrow mr-2">affichage</span>
-        {(["location", "category"] as const).map((mode) => {
+        {(["location", "category", "meal"] as const).map((mode) => {
           const active = stockGroupMode === mode;
           return (
             <button
@@ -577,13 +647,111 @@ export default function InventairePage() {
                 letterSpacing: "0.06em",
               }}
             >
-              {mode === "location" ? "Par emplacement" : "Par catégorie"}
+              {mode === "location" ? "Par emplacement" : mode === "category" ? "Par catégorie" : "Par repas prévu"}
             </button>
           );
         })}
       </div>
 
+      {/* Vue par repas prévu : ingrédients en stock / manquants (fantôme) + jours restants */}
+      {stockGroupMode === "meal" && (
+        <div className="space-y-8">
+          {mealSections.length === 0 ? (
+            <p className="text-sm italic" style={{ color: "var(--color-ink-faint)" }}>
+              Aucun repas planifié cette semaine (ou recettes sans ingrédients).
+            </p>
+          ) : (
+            mealSections.map((sec) => (
+              <section key={sec.key}>
+                <header className="flex items-baseline justify-between gap-3 mb-3">
+                  <h2
+                    className="font-display tracking-tight"
+                    style={{ fontSize: 24, color: "var(--color-ink)", lineHeight: 1.05, fontStyle: "italic" }}
+                  >
+                    {sec.name}{" "}
+                    <span className="font-mono text-[10px] not-italic" style={{ color: "var(--color-ink-faint)" }}>
+                      {sec.day}
+                    </span>
+                  </h2>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {sec.daysLeft != null && (
+                      <span
+                        className="font-mono text-[10px] uppercase rounded-full px-2 py-0.5"
+                        style={{
+                          background:
+                            sec.daysLeft < 0
+                              ? "rgba(200,85,61,0.12)"
+                              : sec.daysLeft <= 3
+                              ? "rgba(201,162,39,0.15)"
+                              : "var(--color-cream-deep)",
+                          color:
+                            sec.daysLeft < 0
+                              ? "var(--color-terracotta-deep)"
+                              : sec.daysLeft <= 3
+                              ? "#8a6d10"
+                              : "var(--color-ink-soft)",
+                          border: "1px solid var(--color-line)",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        {sec.daysLeft < 0 ? "ingrédient périmé" : `${sec.daysLeft} j pour cuisiner`}
+                      </span>
+                    )}
+                    {sec.missingCount > 0 && (
+                      <span
+                        className="font-mono text-[10px] uppercase rounded-full px-2 py-0.5"
+                        style={{ color: "var(--color-ink-mute)", border: "1px dashed var(--color-line)", letterSpacing: "0.06em" }}
+                      >
+                        manque {sec.missingCount}
+                      </span>
+                    )}
+                  </div>
+                </header>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-px" style={{ background: "var(--color-line)" }}>
+                  {sec.ings.map((ing, i) => {
+                    const have = ing.have;
+                    const d = have ? daysUntil(effectiveExpiry(have)) : null;
+                    const exp = d !== null && d < 0;
+                    return (
+                      <div key={i} style={{ background: "var(--color-cream)" }}>
+                        <ItemRow
+                          faded={!have}
+                          leading={
+                            have ? (
+                              <ItemIcon icon={productIcon(have)} />
+                            ) : (
+                              <span className="rounded-full" style={{ width: 8, height: 8, border: "1px solid var(--color-line)" }} />
+                            )
+                          }
+                          name={
+                            !have ? (
+                              <span style={{ color: "var(--color-ink-mute)" }}>{ing.name}</span>
+                            ) : exp ? (
+                              <span style={{ color: "var(--color-terracotta)" }}>{ing.name} · périmé</span>
+                            ) : (
+                              ing.name
+                            )
+                          }
+                          meta={
+                            have
+                              ? `en stock${have.quantity ? " · " + formatQuantity(have.quantity, have.unit) : ""}${
+                                  d !== null ? ` · ${d < 0 ? "périmé" : d + " j"}` : ""
+                                }`
+                              : "à acheter — manquant"
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))
+          )}
+        </div>
+      )}
+
       {/* Sections (par emplacement ou par catégorie) */}
+      {stockGroupMode !== "meal" && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-px" style={{ background: "var(--color-line)" }}>
         {sections.map((sec, idx) => {
           const list = sec.items;
@@ -627,6 +795,7 @@ export default function InventairePage() {
                     const days = daysUntil(effExp);
                     const dlc = dlcLabel(days);
                     const opened = !!it.opened_at;
+                    const expired = days !== null && days < 0;
                     if (editingId === it.id && draft) {
                       return (
                         <li key={it.id} className="py-3 border-b" style={{ borderColor: "var(--color-line-soft)" }}>
@@ -642,7 +811,15 @@ export default function InventairePage() {
                       >
                         <ItemRow
                           leading={<ItemIcon icon={productIcon(it)} />}
-                          name={it.product_name}
+                          name={
+                            expired ? (
+                              <span style={{ color: "var(--color-terracotta)" }}>
+                                {it.product_name} · périmé
+                              </span>
+                            ) : (
+                              it.product_name
+                            )
+                          }
                           meta={`${it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}${opened ? " · ouvert" : ""}`}
                           trailing={
                             <>
@@ -726,6 +903,7 @@ export default function InventairePage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

@@ -520,6 +520,21 @@ export default function ListePage() {
     }).catch(() => {});
   };
 
+  // Retirer tout un repas (tous les articles d'un groupe) de la liste
+  const removeGroup = (groupItems: ListItem[], label: string) => {
+    if (!confirm(`Retirer « ${label} » (${groupItems.length} article${groupItems.length > 1 ? "s" : ""}) de la liste ?`)) return;
+    const ids = new Set(groupItems.map((it) => it.id));
+    setItems((prev) => prev.filter((it) => !ids.has(it.id)));
+    for (const id of ids) {
+      if (id < 0) continue;
+      fetch("/api/list", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      }).catch(() => {});
+    }
+  };
+
   // Saisie directe de la quantité sur un article
   const startQtyEdit = (it: ListItem) => {
     setEditQtyId(it.id);
@@ -1259,6 +1274,16 @@ export default function ListePage() {
                   </span>
                 );
               })()}
+              {groupMode === "recipe" && cat !== "Ajouté manuellement" && (
+                <button
+                  onClick={() => removeGroup(list, cat)}
+                  className="font-mono text-[10px] uppercase rounded-full px-2.5 py-1 transition-colors"
+                  style={{ color: "var(--color-terracotta-deep)", border: "1px solid var(--color-line)", letterSpacing: "0.06em" }}
+                  title="Retirer ce repas de la liste"
+                >
+                  × retirer le repas
+                </button>
+              )}
             </header>
             <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8">
               {list.map((it) => (

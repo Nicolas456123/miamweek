@@ -35,6 +35,8 @@ export default function CoursesPage() {
   const [products, setProducts] = useState<{ id: number; name: string; icon: string | null }[]>(
     () => cacheGet<{ id: number; name: string; icon: string | null }[]>("products") ?? []
   );
+  const [recipesLite, setRecipesLite] = useState<{ id: number; name: string; servings: number | null }[]>([]);
+  const [recipePersons, setRecipePersons] = useState<Record<number, number>>({});
   const [quickAdd, setQuickAdd] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
@@ -60,7 +62,49 @@ export default function CoursesPage() {
         }
       })
       .catch(() => {});
+    fetch("/api/recipes")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setRecipesLite(d.map((r: { id: number; name: string; servings: number | null }) => ({ id: r.id, name: r.name, servings: r.servings })));
+      })
+      .catch(() => {});
+    fetch("/api/recipe-persons")
+      .then((r) => r.json())
+      .then((rows) => {
+        if (!Array.isArray(rows)) return;
+        const m: Record<number, number> = {};
+        for (const row of rows) m[row.recipe_id] = row.persons;
+        setRecipePersons(m);
+      })
+      .catch(() => {});
   }, []);
+
+  // Recettes présentes dans la liste de courses active + contrôle des personnes
+  const presentRecipes = useMemo(() => {
+    const names = new Set<string>();
+    for (const it of items) if (it.source_recipe) names.add(it.source_recipe);
+    const out: { id: number; name: string; persons: number }[] = [];
+    for (const sr of names) {
+      const g = normalize(sr);
+      const rec = recipesLite.find((r) => g.includes(normalize(r.name)));
+      if (rec && !out.some((o) => o.id === rec.id)) {
+        out.push({ id: rec.id, name: rec.name, persons: recipePersons[rec.id] ?? rec.servings ?? 2 });
+      }
+    }
+    return out;
+  }, [items, recipesLite, recipePersons]);
+
+  const setPersons = (recipeId: number, persons: number) => {
+    const p = Math.max(1, persons);
+    setRecipePersons((prev) => ({ ...prev, [recipeId]: p }));
+    fetch("/api/recipe-persons", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipeId, persons: p }),
+    })
+      .then(() => fetchItems())
+      .catch(() => {});
+  };
 
   const iconFor = (item: ListItem): string | null => {
     if (item.product_id != null) {
@@ -392,6 +436,27 @@ export default function CoursesPage() {
         >
           + Ajouter en direct
         </button>
+      )}
+
+      {/* Personnes par plat (partagé avec liste/stock) */}
+      {presentRecipes.length > 0 && (
+        <Card variant="default" padding="sm" className="mb-4">
+          <p className="eyebrow mb-2">Personnes par plat</p>
+          <div className="flex flex-wrap gap-2">
+            {presentRecipes.map((r) => (
+              <span
+                key={r.id}
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
+                style={{ background: "var(--color-cream-pale)", border: "1px solid var(--color-line)", color: "var(--color-ink-soft)" }}
+              >
+                <span className="truncate" style={{ maxWidth: 140 }}>{r.name}</span>
+                <button onClick={() => setPersons(r.id, r.persons - 1)} aria-label="Moins" className="font-mono w-4">−</button>
+                <span className="font-mono tnum" style={{ minWidth: 16, textAlign: "center" }}>{r.persons}</span>
+                <button onClick={() => setPersons(r.id, r.persons + 1)} aria-label="Plus" className="font-mono w-4">+</button>
+              </span>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Shopping list grouped by category */}

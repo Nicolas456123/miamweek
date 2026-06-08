@@ -223,6 +223,8 @@ export default function ListePage() {
   });
   const [serverLists, setServerLists] = useState<string[]>([]);
   const [serverListNames, setServerListNames] = useState<string[]>([]);
+  const [recipesLite, setRecipesLite] = useState<{ id: number; name: string; servings: number | null }[]>([]);
+  const [recipePersons, setRecipePersons] = useState<Record<number, number>>({});
   const [pending, setPending] = useState<{
     productId: number | null;
     name: string;
@@ -275,7 +277,40 @@ export default function ListePage() {
 
   useEffect(() => {
     fetchLists();
+    fetch("/api/recipes")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) {
+          setRecipesLite(d.map((r: { id: number; name: string; servings: number | null }) => ({ id: r.id, name: r.name, servings: r.servings })));
+        }
+      })
+      .catch(() => {});
+    fetch("/api/recipe-persons")
+      .then((r) => r.json())
+      .then((rows) => {
+        if (!Array.isArray(rows)) return;
+        const m: Record<number, number> = {};
+        for (const row of rows) m[row.recipe_id] = row.persons;
+        setRecipePersons(m);
+      })
+      .catch(() => {});
   }, [fetchLists]);
+
+  const recipeForGroup = (groupName: string) => {
+    const g = normalize(groupName);
+    return recipesLite.find((r) => g.includes(normalize(r.name)));
+  };
+  const setRecipePersonsValue = (recipeId: number, persons: number) => {
+    const p = Math.max(1, persons);
+    setRecipePersons((prev) => ({ ...prev, [recipeId]: p }));
+    fetch("/api/recipe-persons", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipeId, persons: p }),
+    })
+      .then(() => fetchList())
+      .catch(() => {});
+  };
 
   // Toutes les listes connues (en base + présentes via les articles)
   const knownLists = useMemo(() => {
@@ -1209,6 +1244,21 @@ export default function ListePage() {
               >
                 {String(list.length).padStart(2, "0")} article{list.length > 1 ? "s" : ""}
               </span>
+              {groupMode === "recipe" && (() => {
+                const rec = recipeForGroup(cat);
+                if (!rec) return null;
+                const persons = recipePersons[rec.id] ?? rec.servings ?? 2;
+                return (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]"
+                    style={{ background: "var(--color-cream-pale)", border: "1px solid var(--color-line)", color: "var(--color-ink-soft)" }}
+                  >
+                    <button onClick={() => setRecipePersonsValue(rec.id, persons - 1)} aria-label="Moins" className="w-3.5 leading-none">−</button>
+                    <span style={{ minWidth: 30, textAlign: "center" }}>{persons} pers.</span>
+                    <button onClick={() => setRecipePersonsValue(rec.id, persons + 1)} aria-label="Plus" className="w-3.5 leading-none">+</button>
+                  </span>
+                );
+              })()}
             </header>
             <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8">
               {list.map((it) => (

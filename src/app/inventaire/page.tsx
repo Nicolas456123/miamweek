@@ -171,33 +171,52 @@ export default function InventairePage() {
       name: string;
       day: string;
       daysLeft: number | null;
-      missingCount: number;
-      ings: { name: string; qty: number | null; unit: string | null; have: PantryItem | null }[];
+      shortageCount: number;
+      ings: {
+        name: string;
+        qty: number | null;
+        unit: string | null;
+        have: PantryItem | null;
+        status: "ok" | "low" | "missing";
+        shortfall: number | null;
+      }[];
     }[] = [];
     for (const m of meals) {
       const rec = m.recipe_id != null ? byId.get(m.recipe_id) : undefined;
       if (!rec || !rec.ingredients || rec.ingredients.length === 0) continue;
-      const ings = rec.ingredients.map((ing) => ({
-        name: ing.name,
-        qty: ing.quantity,
-        unit: ing.unit,
-        have: findStock(ing.name),
-      }));
+      const ings = rec.ingredients.map((ing) => {
+        const have = findStock(ing.name);
+        let status: "ok" | "low" | "missing" = have ? "ok" : "missing";
+        let shortfall: number | null = null;
+        if (
+          have &&
+          ing.quantity != null &&
+          have.quantity != null &&
+          normalize(ing.unit || "") === normalize(have.unit || "") &&
+          have.quantity < ing.quantity
+        ) {
+          status = "low";
+          shortfall = Math.round((ing.quantity - have.quantity) * 100) / 100;
+        }
+        return { name: ing.name, qty: ing.quantity, unit: ing.unit, have, status, shortfall };
+      });
       const haveDays = ings
         .filter((i) => i.have)
         .map((i) => daysUntil(effectiveExpiry(i.have!)))
         .filter((d): d is number => d !== null);
       const daysLeft = haveDays.length ? Math.min(...haveDays) : null;
-      const missingCount = ings.filter((i) => !i.have).length;
+      const shortageCount = ings.filter((i) => i.status !== "ok").length;
       out.push({
         key: `${m.day_of_week}-${m.meal_type}-${m.recipe_id}`,
         name: rec.name,
         day: DAYS[m.day_of_week] ?? "",
         daysLeft,
-        missingCount,
+        shortageCount,
         ings,
       });
     }
+    // Priorise les repas dont un ingrédient en stock périme le plus tôt.
+    out.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity));
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockGroupMode, meals, recipes, items]);
@@ -697,12 +716,12 @@ export default function InventairePage() {
                         {sec.daysLeft < 0 ? "ingrédient périmé" : `${sec.daysLeft} j pour cuisiner`}
                       </span>
                     )}
-                    {sec.missingCount > 0 && (
+                    {sec.shortageCount > 0 && (
                       <span
                         className="font-mono text-[10px] uppercase rounded-full px-2 py-0.5"
                         style={{ color: "var(--color-ink-mute)", border: "1px dashed var(--color-line)", letterSpacing: "0.06em" }}
                       >
-                        manque {sec.missingCount}
+                        manque {sec.shortageCount}
                       </span>
                     )}
                   </div>
@@ -712,10 +731,22 @@ export default function InventairePage() {
                     const have = ing.have;
                     const d = have ? daysUntil(effectiveExpiry(have)) : null;
                     const exp = d !== null && d < 0;
+                    const need = ing.qty != null ? `il faut ${formatQuantity(ing.qty, ing.unit)}` : "à prévoir";
+                    const stockStr = have?.quantity ? formatQuantity(have.quantity, have.unit) : have ? "en stock" : "";
+                    let meta: string;
+                    if (ing.status === "missing") {
+                      meta = `${need} · à acheter — manquant`;
+                    } else if (ing.status === "low") {
+                      meta = `${need} · en stock ${stockStr} — pas assez${
+                        ing.shortfall != null ? ` (il manque ${formatQuantity(ing.shortfall, ing.unit)})` : ""
+                      }`;
+                    } else {
+                      meta = `${need} · en stock ${stockStr}${d !== null ? ` · ${d < 0 ? "périmé" : d + " j"}` : ""}`;
+                    }
                     return (
                       <div key={i} className="border-b" style={{ borderColor: "var(--color-line-soft)" }}>
                         <ItemRow
-                          faded={!have}
+                          faded={ing.status === "missing"}
                           leading={
                             have ? (
                               <ItemIcon icon={productIcon(have)} />
@@ -724,21 +755,17 @@ export default function InventairePage() {
                             )
                           }
                           name={
-                            !have ? (
+                            ing.status === "missing" ? (
                               <span style={{ color: "var(--color-ink-mute)" }}>{ing.name}</span>
                             ) : exp ? (
                               <span style={{ color: "var(--color-terracotta)" }}>{ing.name} · périmé</span>
+                            ) : ing.status === "low" ? (
+                              <span style={{ color: "#8a6d10" }}>{ing.name} · pas assez</span>
                             ) : (
                               ing.name
                             )
                           }
-                          meta={
-                            have
-                              ? `en stock${have.quantity ? " · " + formatQuantity(have.quantity, have.unit) : ""}${
-                                  d !== null ? ` · ${d < 0 ? "périmé" : d + " j"}` : ""
-                                }`
-                              : "à acheter — manquant"
-                          }
+                          meta={meta}
                         />
                       </div>
                     );

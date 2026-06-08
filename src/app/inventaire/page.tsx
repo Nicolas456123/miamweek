@@ -707,13 +707,13 @@ export default function InventairePage() {
                     )}
                   </div>
                 </header>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-px" style={{ background: "var(--color-line)" }}>
+                <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8">
                   {sec.ings.map((ing, i) => {
                     const have = ing.have;
                     const d = have ? daysUntil(effectiveExpiry(have)) : null;
                     const exp = d !== null && d < 0;
                     return (
-                      <div key={i} style={{ background: "var(--color-cream)" }}>
+                      <div key={i} className="border-b" style={{ borderColor: "var(--color-line-soft)" }}>
                         <ItemRow
                           faded={!have}
                           leading={

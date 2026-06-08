@@ -168,7 +168,10 @@ function SwipeRow({ onRemove, children }: { onRemove: () => void; children: Reac
   };
 
   return (
-    <div className="relative overflow-hidden" style={{ background: "var(--color-cream)" }}>
+    <div
+      className="relative overflow-hidden border-b"
+      style={{ background: "var(--color-cream)", borderColor: "var(--color-line-soft)" }}
+    >
       {/* Fond rouge « supprimer » — affiché uniquement pendant le glissement */}
       {dx < 0 && (
         <div
@@ -1207,7 +1210,7 @@ export default function ListePage() {
                 {String(list.length).padStart(2, "0")} article{list.length > 1 ? "s" : ""}
               </span>
             </header>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-px" style={{ background: "var(--color-line)" }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8">
               {list.map((it) => (
                 <SwipeRow key={it.id} onRemove={() => removeItem(it.id)}>
                   <ItemRow

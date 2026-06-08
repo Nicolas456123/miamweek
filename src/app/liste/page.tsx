@@ -229,6 +229,7 @@ export default function ListePage() {
   } | null>(null);
   const [editQtyId, setEditQtyId] = useState<number | null>(null);
   const [editQtyValue, setEditQtyValue] = useState("");
+  const [groupMode, setGroupMode] = useState<"category" | "recipe">("category");
   const [now, setNow] = useState<Date | null>(null);
   const nextTempIdRef = useRef(-1);
   const itemsRef = useRef<ListItem[]>([]);
@@ -524,13 +525,25 @@ export default function ListePage() {
     return items.filter((it) => (it.category || "Autre") === activeCategory);
   }, [items, activeCategory]);
 
-  // Group by category, ordered
+  // Groupement par rayon (catégorie) ou par repas (recette source)
   const grouped = useMemo(() => {
     const groups: Record<string, ListItem[]> = {};
+    if (groupMode === "recipe") {
+      for (const it of visibleItems) {
+        const key = it.source_recipe || "Ajouté manuellement";
+        (groups[key] ||= []).push(it);
+      }
+      // Recettes d'abord (triées), « Ajouté manuellement » en dernier
+      const keys = Object.keys(groups).sort((a, b) => {
+        if (a === "Ajouté manuellement") return 1;
+        if (b === "Ajouté manuellement") return -1;
+        return a.localeCompare(b);
+      });
+      return keys.map((k) => [k, groups[k]] as [string, ListItem[]]);
+    }
     for (const it of visibleItems) {
       const cat = it.category || "Autre";
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(it);
+      (groups[cat] ||= []).push(it);
     }
     const ordered: [string, ListItem[]][] = [];
     for (const cat of CATEGORY_ORDER) {
@@ -540,7 +553,7 @@ export default function ListePage() {
       if (!CATEGORY_ORDER.includes(cat)) ordered.push([cat, list]);
     }
     return ordered;
-  }, [visibleItems]);
+  }, [visibleItems, groupMode]);
 
   // Correspondance produit (par id puis par nom) pour icône + prix
   const productMaps = useMemo(() => {
@@ -780,6 +793,30 @@ export default function ListePage() {
             </svg>
           </button>
         )}
+      </div>
+
+      {/* Affichage : par rayon ou par repas */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="eyebrow mr-2">affichage</span>
+        {(["category", "recipe"] as const).map((mode) => {
+          const active = groupMode === mode;
+          return (
+            <button
+              key={mode}
+              onClick={() => setGroupMode(mode)}
+              className="font-mono text-[11px] uppercase tracking-wider rounded-full px-3 py-1 transition-colors"
+              style={{
+                background: active ? "var(--color-ink)" : "var(--color-cream-pale)",
+                color: active ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
+                border: "1px solid",
+                borderColor: active ? "var(--color-ink)" : "var(--color-line)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              {mode === "category" ? "Par rayon" : "Par repas"}
+            </button>
+          );
+        })}
       </div>
 
       {/* Filter chips */}
@@ -1152,9 +1189,11 @@ export default function ListePage() {
               >
                 {String(idx + 1).padStart(2, "0")}
               </span>
-              <span className="self-center">
-                <CategoryIcon category={cat} size={20} />
-              </span>
+              {groupMode === "category" && (
+                <span className="self-center">
+                  <CategoryIcon category={cat} size={20} />
+                </span>
+              )}
               <h2
                 className="font-display tracking-tight"
                 style={{ fontSize: 30, color: "var(--color-ink)", lineHeight: 1.05, fontStyle: "italic" }}

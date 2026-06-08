@@ -227,6 +227,8 @@ export default function ListePage() {
     unit: string;
     category: string;
   } | null>(null);
+  const [editQtyId, setEditQtyId] = useState<number | null>(null);
+  const [editQtyValue, setEditQtyValue] = useState("");
   const [now, setNow] = useState<Date | null>(null);
   const nextTempIdRef = useRef(-1);
   const itemsRef = useRef<ListItem[]>([]);
@@ -479,6 +481,30 @@ export default function ListePage() {
     }).catch(() => {});
   };
 
+  // Saisie directe de la quantité sur un article
+  const startQtyEdit = (it: ListItem) => {
+    setEditQtyId(it.id);
+    setEditQtyValue(it.quantity != null ? String(it.quantity) : "");
+  };
+  const saveQtyEdit = (it: ListItem) => {
+    const raw = editQtyValue.replace(",", ".").trim();
+    setEditQtyId(null);
+    if (raw === "" || isNaN(Number(raw))) return;
+    const q = Math.max(0, Number(raw));
+    if (q === it.quantity) return;
+    if (q === 0) {
+      removeItem(it.id);
+      return;
+    }
+    setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, quantity: q } : x)));
+    offlineFetch("/api/list", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: it.id, quantity: q }),
+      offlineOptimistic: true,
+    }).catch(() => {});
+  };
+
   const validateAndGoToCourses = async () => {
     if (items.length === 0) {
       toast("La liste est vide.");
@@ -542,12 +568,16 @@ export default function ListePage() {
   const priceFor = useCallback(
     (it: ListItem): number => {
       const p = productFor(it);
+      let value: number;
       if (p?.price != null) {
         const dq = p.default_quantity || 1;
         const ratio = it.quantity && dq ? it.quantity / dq : 1;
-        return p.price * ratio;
+        value = p.price * ratio;
+      } else {
+        value = estimatePrice(it.quantity, it.unit);
       }
-      return estimatePrice(it.quantity, it.unit);
+      // Borne de sécurité : un article reste une estimation raisonnable.
+      return Math.min(value, 50);
     },
     [productFor]
   );
@@ -1144,9 +1174,35 @@ export default function ListePage() {
                   <ItemRow
                     leading={<ItemIcon icon={productFor(it)?.icon} />}
                     name={it.product_name}
-                    meta={`${it.quantity ? formatQuantity(it.quantity, it.unit) : ""}${
-                      it.source_recipe ? ` · ${it.source_recipe}` : ""
-                    }`}
+                    meta={
+                      editQtyId === it.id ? (
+                        <span className="inline-flex items-center gap-1">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={editQtyValue}
+                            autoFocus
+                            onChange={(e) => setEditQtyValue(e.target.value)}
+                            onBlur={() => saveQtyEdit(it)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveQtyEdit(it);
+                              if (e.key === "Escape") setEditQtyId(null);
+                            }}
+                            className="w-14 bg-[var(--color-cream-pale)] border border-[var(--color-terracotta)] rounded px-1 py-0.5 text-[11px] tnum focus:outline-none"
+                          />
+                          <span>{it.unit}</span>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => startQtyEdit(it)}
+                          className="text-left hover:underline"
+                          title="Saisir la quantité"
+                        >
+                          {it.quantity ? formatQuantity(it.quantity, it.unit) : "—"}
+                          {it.source_recipe ? ` · ${it.source_recipe}` : ""}
+                        </button>
+                      )
+                    }
                     trailing={
                       <>
                         <HoldButton

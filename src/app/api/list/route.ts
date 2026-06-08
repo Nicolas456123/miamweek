@@ -62,13 +62,17 @@ export async function POST(request: Request) {
     }
   }
 
-  // Check if same product already in list (same status + same list) → merge quantities
+  // Fusionne avec un article existant uniquement si même produit, même statut,
+  // même liste ET même unité (sinon on additionnait des g dans des kg…).
   if (finalProductId) {
     const existing = await query(
-      "SELECT id, quantity FROM list_items WHERE product_id = ? AND list_status = ? AND list_name = ? LIMIT 1",
+      "SELECT id, quantity, unit FROM list_items WHERE product_id = ? AND list_status = ? AND list_name = ? LIMIT 1",
       [finalProductId, listStatus || "prep", finalListName]
     );
-    if (existing.rows.length > 0) {
+    const sameUnit =
+      existing.rows.length > 0 &&
+      (existing.rows[0].unit || null) === (finalUnit || null);
+    if (existing.rows.length > 0 && sameUnit) {
       const existingQty = (existing.rows[0].quantity as number) || 1;
       const addQty = finalQty || 1;
       const mergedQty = existingQty + addQty;

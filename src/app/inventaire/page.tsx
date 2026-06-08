@@ -8,7 +8,7 @@ import { cacheGet, cacheSet } from "@/lib/client-cache";
 import { rankedFilter, formatQuantity, normalize, getMonday, DAYS, UNITS, PRODUCT_CATEGORIES } from "@/lib/utils";
 
 type PlannedMeal = { day_of_week: number; meal_type: string; recipe_id: number | null; custom_name: string | null };
-type RecipeLite = { id: number; name: string; ingredients?: { name: string; quantity: number | null; unit: string | null }[] };
+type RecipeLite = { id: number; name: string; servings?: number | null; ingredients?: { name: string; quantity: number | null; unit: string | null }[] };
 
 type Product = {
   id: number;
@@ -109,6 +109,7 @@ export default function InventairePage() {
   const [stockGroupMode, setStockGroupMode] = useState<"location" | "category" | "meal">("location");
   const [meals, setMeals] = useState<PlannedMeal[]>([]);
   const [recipes, setRecipes] = useState<RecipeLite[]>([]);
+  const [recipePersons, setRecipePersons] = useState<Record<number, number>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
 
@@ -146,7 +147,29 @@ export default function InventairePage() {
         if (Array.isArray(d)) setRecipes(d);
       })
       .catch(() => {});
+    fetch("/api/recipe-persons")
+      .then((r) => r.json())
+      .then((rows) => {
+        if (!Array.isArray(rows)) return;
+        const map: Record<number, number> = {};
+        for (const row of rows) map[row.recipe_id] = row.persons;
+        setRecipePersons(map);
+      })
+      .catch(() => {});
   }, []);
+
+  const personsFor = (recipeId: number, baseServings: number | null | undefined) =>
+    recipePersons[recipeId] ?? baseServings ?? 2;
+
+  const setPersons = (recipeId: number, persons: number) => {
+    const p = Math.max(1, persons);
+    setRecipePersons((prev) => ({ ...prev, [recipeId]: p }));
+    fetch("/api/recipe-persons", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipeId, persons: p }),
+    }).catch(() => {});
+  };
 
   // Recherche d'un produit du stock par nom (souple)
   const stockByName = useMemo(() => {
@@ -168,6 +191,8 @@ export default function InventairePage() {
     const byId = new Map(recipes.map((r) => [r.id, r]));
     const out: {
       key: string;
+      recipeId: number;
+      persons: number;
       name: string;
       day: string;
       daysLeft: number | null;
@@ -184,21 +209,25 @@ export default function InventairePage() {
     for (const m of meals) {
       const rec = m.recipe_id != null ? byId.get(m.recipe_id) : undefined;
       if (!rec || !rec.ingredients || rec.ingredients.length === 0) continue;
+      const baseServings = rec.servings || 2;
+      const persons = personsFor(rec.id, rec.servings);
+      const factor = persons / baseServings;
       const ings = rec.ingredients.map((ing) => {
+        const reqQty = ing.quantity != null ? Math.round(ing.quantity * factor * 100) / 100 : null;
         const have = findStock(ing.name);
         let status: "ok" | "low" | "missing" = have ? "ok" : "missing";
         let shortfall: number | null = null;
         if (
           have &&
-          ing.quantity != null &&
+          reqQty != null &&
           have.quantity != null &&
           normalize(ing.unit || "") === normalize(have.unit || "") &&
-          have.quantity < ing.quantity
+          have.quantity < reqQty
         ) {
           status = "low";
-          shortfall = Math.round((ing.quantity - have.quantity) * 100) / 100;
+          shortfall = Math.round((reqQty - have.quantity) * 100) / 100;
         }
-        return { name: ing.name, qty: ing.quantity, unit: ing.unit, have, status, shortfall };
+        return { name: ing.name, qty: reqQty, unit: ing.unit, have, status, shortfall };
       });
       const haveDays = ings
         .filter((i) => i.have)
@@ -208,6 +237,8 @@ export default function InventairePage() {
       const shortageCount = ings.filter((i) => i.status !== "ok").length;
       out.push({
         key: `${m.day_of_week}-${m.meal_type}-${m.recipe_id}`,
+        recipeId: rec.id,
+        persons,
         name: rec.name,
         day: DAYS[m.day_of_week] ?? "",
         daysLeft,
@@ -219,7 +250,7 @@ export default function InventairePage() {
     out.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity));
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockGroupMode, meals, recipes, items]);
+  }, [stockGroupMode, meals, recipes, items, recipePersons]);
 
   const addProduct = async (p: Product) => {
     await fetch("/api/pantry", {
@@ -724,6 +755,15 @@ export default function InventairePage() {
                         manque {sec.shortageCount}
                       </span>
                     )}
+                    {/* Nombre de personnes (partagé liste/courses/stock) */}
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]"
+                      style={{ background: "var(--color-cream-pale)", border: "1px solid var(--color-line)", color: "var(--color-ink-soft)" }}
+                    >
+                      <button onClick={() => setPersons(sec.recipeId, sec.persons - 1)} aria-label="Moins" className="w-3.5 leading-none">−</button>
+                      <span style={{ minWidth: 30, textAlign: "center" }}>{sec.persons} pers.</span>
+                      <button onClick={() => setPersons(sec.recipeId, sec.persons + 1)} aria-label="Plus" className="w-3.5 leading-none">+</button>
+                    </span>
                   </div>
                 </header>
                 <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8">

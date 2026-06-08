@@ -103,6 +103,7 @@ export default function InventairePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [activeLocation, setActiveLocation] = useState<LocationKey>("frigo");
+  const [stockGroupMode, setStockGroupMode] = useState<"location" | "category">("location");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
 
@@ -262,6 +263,28 @@ export default function InventairePage() {
     }
     return groups;
   }, [items]);
+
+  const sections = useMemo(() => {
+    if (stockGroupMode === "category") {
+      const groups: Record<string, PantryItem[]> = {};
+      for (const it of items) {
+        const c = it.category || "Autre";
+        (groups[c] ||= []).push(it);
+      }
+      const order = [...PRODUCT_CATEGORIES, "Autre"] as string[];
+      const ordered: { key: string; label: string; items: PantryItem[] }[] = [];
+      for (const c of order) if (groups[c]) ordered.push({ key: c, label: c, items: groups[c] });
+      for (const [c, list] of Object.entries(groups)) {
+        if (!order.includes(c)) ordered.push({ key: c, label: c, items: list });
+      }
+      return ordered;
+    }
+    return LOCATIONS.map((l) => ({
+      key: l.key as string,
+      label: l.label,
+      items: groupedByLocation[l.key],
+    }));
+  }, [stockGroupMode, items, groupedByLocation]);
 
   const total = items.length;
   const expiring = useMemo(() => {
@@ -536,13 +559,37 @@ export default function InventairePage() {
         </div>
       )}
 
-      {/* 3 columns by location */}
+      {/* Affichage : par emplacement ou par catégorie */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="eyebrow mr-2">affichage</span>
+        {(["location", "category"] as const).map((mode) => {
+          const active = stockGroupMode === mode;
+          return (
+            <button
+              key={mode}
+              onClick={() => setStockGroupMode(mode)}
+              className="font-mono text-[11px] uppercase tracking-wider rounded-full px-3 py-1 transition-colors"
+              style={{
+                background: active ? "var(--color-ink)" : "var(--color-cream-pale)",
+                color: active ? "var(--color-cream-pale)" : "var(--color-ink-soft)",
+                border: "1px solid",
+                borderColor: active ? "var(--color-ink)" : "var(--color-line)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              {mode === "location" ? "Par emplacement" : "Par catégorie"}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sections (par emplacement ou par catégorie) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-px" style={{ background: "var(--color-line)" }}>
-        {LOCATIONS.map((loc, idx) => {
-          const list = groupedByLocation[loc.key];
+        {sections.map((sec, idx) => {
+          const list = sec.items;
           return (
             <section
-              key={loc.key}
+              key={sec.key}
               className="px-1 py-6"
               style={{ background: "var(--color-cream)" }}
             >
@@ -558,7 +605,7 @@ export default function InventairePage() {
                     className="font-display tracking-tight"
                     style={{ fontSize: 28, color: "var(--color-ink)", lineHeight: 1.05, fontStyle: "italic" }}
                   >
-                    {loc.label}
+                    {sec.label}
                   </h2>
                 </div>
                 <span

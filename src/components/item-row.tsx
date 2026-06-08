@@ -50,12 +50,12 @@ export function ItemRow({
           {name}
         </p>
         {meta != null && meta !== "" && (
-          <p
+          <div
             className="font-mono text-[10px] mt-0.5 truncate"
             style={{ color: "var(--color-ink-mute)", letterSpacing: "0.04em" }}
           >
             {meta}
-          </p>
+          </div>
         )}
       </div>
       {trailing != null && <div className="flex items-center gap-1 shrink-0">{trailing}</div>}
